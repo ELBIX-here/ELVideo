@@ -1,0 +1,15 @@
+{
+  "name": "elvideo",
+  "version": "0.1.0",
+  "description": "Windows screen recorder (WGC + Media Foundation + Qt/QML)",
+  "dependencies": [
+    "spdlog",
+    "nlohmann-json"
+  ],
+  "features": {
+    "tests": {
+      "description": "Unit tests",
+      "dependencies": [ "catch2" ]
+    }
+  }
+}
