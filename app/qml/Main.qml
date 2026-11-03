@@ -35,6 +35,7 @@ ApplicationWindow {
     font.family: Theme.fontFamily
 
     property bool showSettings: false
+    property bool showLibrary: false
     property bool hiddenForRecording: false
     property bool wasActive: false
     property bool trayHintShown: false
@@ -220,7 +221,8 @@ ApplicationWindow {
             }
             Text {
                 Layout.leftMargin: 6
-                text: recorder.replayMode ? qsTr("리플레이 버퍼") : recorder.active ? qsTr("녹화 중") : root.showSettings ? qsTr("설정") : qsTr("녹화할 화면을 고르세요")
+                text: recorder.replayMode ? qsTr("리플레이 버퍼") : recorder.active ? qsTr("녹화 중")
+                    : root.showLibrary ? qsTr("라이브러리") : root.showSettings ? qsTr("설정") : qsTr("녹화할 화면을 고르세요")
                 color: Theme.textDim
                 font.family: Theme.fontFamily
                 font.pixelSize: 13
@@ -234,6 +236,15 @@ ApplicationWindow {
                 font.pixelSize: 12
             }
             IconButton {
+                glyph: Theme.iconLibrary
+                tip: qsTr("라이브러리")
+                iconColor: root.showLibrary ? Theme.accent : Theme.text
+                onClicked: {
+                    root.showLibrary = !root.showLibrary
+                    root.showSettings = false
+                }
+            }
+            IconButton {
                 visible: desktop.hasPlayer()
                 glyph: Theme.iconPlay
                 tip: qsTr("동영상 열기 (ELVideo 플레이어)")
@@ -242,19 +253,25 @@ ApplicationWindow {
             IconButton {
                 glyph: root.showSettings ? Theme.iconBack : Theme.iconSettings
                 tip: root.showSettings ? qsTr("돌아가기") : qsTr("설정")
-                onClicked: root.showSettings = !root.showSettings
+                onClicked: {
+                    root.showSettings = !root.showSettings
+                    root.showLibrary = false
+                }
             }
         }
 
         StackLayout {
             Layout.fillWidth: true
             Layout.fillHeight: true
-            currentIndex: recorder.active ? 2 : root.showSettings ? 1 : 0
+            currentIndex: recorder.active ? 2 : root.showLibrary ? 3 : root.showSettings ? 1 : 0
             SourcePicker {
                 onRegionRequested: root.selectRegion()
             }
             SettingsPage {}
             PreviewPanel {}
+            LibraryPage {
+                onMessage: text => toast.showSaved(text, "")
+            }
         }
 
         Toast {

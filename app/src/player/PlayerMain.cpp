@@ -5,11 +5,13 @@
 #include "player/PlayerMain.h"
 
 #include "AppSettings.h"
+#include "player/SeekThumbnailer.h"
 #include "Desktop.h"
 #include "core/IRecorder.h"
 
 #include <QApplication>
 #include <QDir>
+#include <QElapsedTimer>
 #include <QFileInfo>
 #include <QIcon>
 #include <QQmlApplicationEngine>
@@ -45,12 +47,30 @@ int runPlayer(int argc, char* argv[]) {
     settings.load();
     Desktop desktop;
 
+    SeekThumbnailer seekThumbs;
     QQmlApplicationEngine engine;
+    engine.addImageProvider(QStringLiteral("seekthumb"), new SeekThumbnailProvider(seekThumbs));
     auto* context = engine.rootContext();
+    context->setContextProperty(QStringLiteral("seekThumbs"), &seekThumbs);
     context->setContextProperty(QStringLiteral("desktop"), &desktop);
     context->setContextProperty(QStringLiteral("appSettings"), &settings);
     context->setContextProperty(QStringLiteral("initialFile"),
                                 file.isEmpty() ? QString() : QUrl::fromLocalFile(QFileInfo(file).absoluteFilePath()).toString());
+#ifndef NDEBUG
+    // Test hook: ELV_TEST_SEEKTHUMB=<png> saves the hover preview for 5 s once a file is open.
+    if (const QString out = qEnvironmentVariable("ELV_TEST_SEEKTHUMB"); !out.isEmpty()) {
+        auto* clock = new QElapsedTimer;
+        QObject::connect(&seekThumbs, &SeekThumbnailer::fileChanged, &app, [&seekThumbs, clock] {
+            clock->start();
+            seekThumbs.request(5.0);
+        });
+        QObject::connect(&seekThumbs, &SeekThumbnailer::ready, &app, [&seekThumbs, out, clock] {
+            seekThumbs.image().save(out);
+            spdlog::info("seek thumbnail test: t={} {}x{} after {} ms", seekThumbs.time(), seekThumbs.image().width(),
+                         seekThumbs.image().height(), clock->elapsed());
+        });
+    }
+#endif
     QObject::connect(&engine, &QQmlApplicationEngine::objectCreationFailed, &app,
                      [] { QCoreApplication::exit(-1); }, Qt::QueuedConnection);
     engine.loadFromModule("ELVideo", "Player");

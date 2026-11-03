@@ -9,8 +9,8 @@ ApplicationWindow {
 
     width: 1280
     height: 760
-    minimumWidth: 480
-    minimumHeight: 320
+    minimumWidth: mini ? 240 : 480
+    minimumHeight: mini ? 135 : 320
     visible: true
     color: "black"
     title: player.idle || player.title.length === 0 ? qsTr("ELVideo 플레이어") : player.title + " — ELVideo"
@@ -34,6 +34,74 @@ ApplicationWindow {
     property bool controlsShown: true
     property bool infoShown: false
     property bool onTop: false
+    property bool mini: false          // PiP: small, frameless, always on top
+    property rect normalGeometry
+    property bool normalize: false     // audio: dynaudnorm
+    property bool hflip: false
+    property bool vflip: false
+
+    function toggleMini() {
+        if (!mini) {
+            if (fullscreen) showNormal()
+            normalGeometry = Qt.rect(x, y, width, height)
+            const w = 480
+            const h = player.videoWidth > 0 ? Math.round(w * player.videoHeight / player.videoWidth) : 270
+            mini = true
+            flags = Qt.Window | Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint
+            width = w
+            height = h
+            x = Screen.virtualX + Screen.desktopAvailableWidth - w - 24
+            y = Screen.virtualY + Screen.desktopAvailableHeight - h - 24
+        } else {
+            mini = false
+            flags = Qt.Window | (onTop ? Qt.WindowStaysOnTopHint : 0)
+            x = normalGeometry.x
+            y = normalGeometry.y
+            width = normalGeometry.width
+            height = normalGeometry.height
+            desktop.useDarkTitleBar(win)
+        }
+    }
+    function adjust(property, delta) {
+        if (delta === 0) {
+            for (const p of ["brightness", "contrast", "saturation", "gamma"]) player.setMpvProperty(p, 0)
+            player.setMpvProperty("video-zoom", 0)
+            player.setMpvProperty("video-pan-x", 0)
+            player.setMpvProperty("video-pan-y", 0)
+            osd(qsTr("화면 조정 초기화"))
+            return
+        }
+        player.command(["add", property, delta])
+        const names = { brightness: qsTr("밝기"), contrast: qsTr("대비"), saturation: qsTr("채도"), "video-zoom": qsTr("확대") }
+        Qt.callLater(() => osd(names[property] + " " + Number(player.getMpvProperty(property)).toFixed(property === "video-zoom" ? 1 : 0)))
+    }
+    function setAspect(value, label) {
+        player.setMpvProperty("video-aspect-override", value)
+        osd(qsTr("화면 비율: %1").arg(label))
+    }
+    function rotate() {
+        const r = (Number(player.getMpvProperty("video-rotate")) + 90) % 360
+        player.setMpvProperty("video-rotate", r)
+        osd(qsTr("회전 %1°").arg(r))
+    }
+    function flip(horizontal) {
+        player.command(["vf", "toggle", horizontal ? "hflip" : "vflip"])
+        if (horizontal) hflip = !hflip; else vflip = !vflip
+        osd(horizontal ? (hflip ? qsTr("좌우 반전") : qsTr("좌우 반전 해제")) : (vflip ? qsTr("상하 반전") : qsTr("상하 반전 해제")))
+    }
+    function toggleNormalize() {
+        player.command(["af", "toggle", "dynaudnorm"])
+        normalize = !normalize
+        osd(normalize ? qsTr("음량 평준화 켬") : qsTr("음량 평준화 끔"))
+    }
+    function chapterStep(delta) {
+        if (player.chapters.length === 0) return
+        player.command(["add", "chapter", delta])
+        Qt.callLater(() => {
+            const c = player.chapters[Number(player.getMpvProperty("chapter"))]
+            if (c) osd(qsTr("챕터: %1").arg(c.title || seekBar.format(c.time)))
+        })
+    }
 
     function showControls() {
         controlsShown = true
@@ -73,13 +141,37 @@ ApplicationWindow {
         desktop.useDarkTitleBar(win)
         if (initialFile.length > 0) player.open(initialFile)
     }
-    onClosing: player.saveResumePosition()
+    // Closing while mpv still has its audio output open crashes in the Qt Windows plugin
+    // during shutdown. So: remember the position, stop (which releases the audio
+    // device), and close for real once mpv is idle.
+    property bool closeWhenIdle: false
+    onClosing: close => {
+        if (player.idle) return
+        close.accepted = false
+        if (closeWhenIdle) return
+        closeWhenIdle = true
+        player.saveResumePosition()
+        player.command(["stop"])
+        stopTimeout.start()
+    }
+    Connections {
+        target: player
+        function onIdleChanged() { if (win.closeWhenIdle && player.idle) Qt.callLater(win.close) }
+    }
+    Timer {  // never get stuck open if mpv does not report idle
+        id: stopTimeout
+        interval: 2000
+        onTriggered: { player.command(["set_property", "options/ao", "null"]); Qt.callLater(Qt.quit) }
+    }
 
     MpvItem {
         id: player
         anchors.fill: parent
         onError: message => win.osd(qsTr("재생할 수 없습니다: %1").arg(message))
         onFileLoaded: win.showControls()
+        // Hover previews: the thumbnailer needs the file and the picture's aspect ratio.
+        onVideoSizeChanged: if (videoWidth > 0) seekThumbs.setFile(path, videoWidth, videoHeight)
+        onFileChanged: if (path.length === 0) seekThumbs.setFile("", 0, 0)
     }
 
     Timer {
@@ -200,7 +292,7 @@ ApplicationWindow {
         anchors.right: parent.right
         anchors.bottom: parent.bottom
         height: 96
-        opacity: win.controlsShown || player.paused || player.idle ? 1 : 0
+        opacity: !win.mini && (win.controlsShown || player.paused || player.idle) ? 1 : 0
         visible: opacity > 0
         Behavior on opacity { NumberAnimation { duration: 180 } }
         gradient: Gradient {
@@ -293,6 +385,12 @@ ApplicationWindow {
             }
             Item { Layout.fillWidth: true }
 
+            IconButton {
+                visible: player.chapters.length > 0
+                glyph: "\uE8FD"  // BulletedList
+                tip: qsTr("챕터 (Shift+PgUp / PgDn)")
+                onClicked: chapterMenu.popup()
+            }
             ToolButton {
                 text: player.speed.toFixed(2).replace(/0$/, "") + "x"
                 font.pixelSize: 13
@@ -345,13 +443,72 @@ ApplicationWindow {
                 onClicked: win.onTop = !win.onTop
             }
             IconButton {
+                glyph: "\uE8A7"  // OpenInNewWindow
+                tip: qsTr("미니 플레이어 (P)")
+                enabled: !player.idle
+                onClicked: win.toggleMini()
+            }
+            IconButton {
                 glyph: win.fullscreen ? "" : ""
                 tip: qsTr("전체 화면 (Enter, 더블클릭)")
                 onClicked: win.toggleFullscreen()
             }
         }
     }
-    onOnTopChanged: flags = onTop ? (flags | Qt.WindowStaysOnTopHint) : (flags & ~Qt.WindowStaysOnTopHint)
+    onOnTopChanged: if (!mini) flags = onTop ? (flags | Qt.WindowStaysOnTopHint) : (flags & ~Qt.WindowStaysOnTopHint)
+
+    // Mini player: drag strip and a few buttons on hover.
+    Item {
+        anchors.fill: parent
+        visible: win.mini
+        HoverHandler { id: miniHover }
+        Rectangle {
+            anchors.left: parent.left
+            anchors.right: parent.right
+            height: 30
+            color: Qt.rgba(0, 0, 0, 0.55)
+            opacity: miniHover.hovered ? 1 : 0
+            Behavior on opacity { NumberAnimation { duration: 150 } }
+            DragHandler {
+                target: null
+                onActiveChanged: if (active) win.startSystemMove()
+            }
+            Row {
+                anchors.right: parent.right
+                anchors.verticalCenter: parent.verticalCenter
+                IconButton {
+                    width: 30
+                    height: 30
+                    iconSize: 12
+                    glyph: player.paused ? Theme.iconPlay : Theme.iconPause
+                    tip: player.paused ? qsTr("재생") : qsTr("일시정지")
+                    onClicked: player.togglePause()
+                }
+                IconButton {
+                    width: 30
+                    height: 30
+                    iconSize: 12
+                    glyph: "\uE73F"  // BackToWindow
+                    tip: qsTr("원래 크기로 (P)")
+                    onClicked: win.toggleMini()
+                }
+                IconButton {
+                    width: 30
+                    height: 30
+                    iconSize: 12
+                    glyph: Theme.iconClose
+                    tip: qsTr("닫기")
+                    onClicked: win.close()
+                }
+            }
+        }
+        Rectangle {  // thin progress line
+            anchors.bottom: parent.bottom
+            height: 3
+            width: player.duration > 0 ? parent.width * player.position / player.duration : 0
+            color: Theme.record
+        }
+    }
 
     // Track menus, rebuilt from mpv's track-list.
     component TrackMenu: Menu {
@@ -390,6 +547,43 @@ ApplicationWindow {
     }
 
     Menu {
+        id: chapterMenu
+        Instantiator {
+            model: player.chapters
+            delegate: MenuItem {
+                required property var modelData
+                required property int index
+                text: seekBar.format(modelData.time) + "   " + (modelData.title || qsTr("챕터 %1").arg(index + 1))
+                onTriggered: player.seek(modelData.time)
+            }
+            onObjectAdded: (index, object) => chapterMenu.insertItem(index, object)
+            onObjectRemoved: (index, object) => chapterMenu.removeItem(object)
+        }
+    }
+    Menu {
+        id: pictureMenu
+        title: qsTr("화면")
+        Menu {
+            title: qsTr("화면 비율")
+            MenuItem { text: qsTr("원본"); onTriggered: win.setAspect("-1", qsTr("원본")) }
+            MenuItem { text: "16:9"; onTriggered: win.setAspect("16:9", "16:9") }
+            MenuItem { text: "4:3"; onTriggered: win.setAspect("4:3", "4:3") }
+            MenuItem { text: "21:9 (2.35:1)"; onTriggered: win.setAspect("2.35:1", "2.35:1") }
+            MenuItem { text: "1:1"; onTriggered: win.setAspect("1:1", "1:1") }
+        }
+        MenuItem { text: qsTr("확대 (Ctrl+=)"); onTriggered: win.adjust("video-zoom", 0.1) }
+        MenuItem { text: qsTr("축소 (Ctrl+-)"); onTriggered: win.adjust("video-zoom", -0.1) }
+        MenuItem { text: qsTr("90° 회전 (Ctrl+R)"); onTriggered: win.rotate() }
+        MenuItem { text: qsTr("좌우 반전"); checkable: true; checked: win.hflip; onTriggered: win.flip(true) }
+        MenuItem { text: qsTr("상하 반전"); checkable: true; checked: win.vflip; onTriggered: win.flip(false) }
+        MenuSeparator {}
+        MenuItem { text: qsTr("밝기 + / − (W / Q)"); onTriggered: win.adjust("brightness", 5) }
+        MenuItem { text: qsTr("대비 + / − (R / E)"); onTriggered: win.adjust("contrast", 5) }
+        MenuItem { text: qsTr("채도 + / − (Y / T)"); onTriggered: win.adjust("saturation", 5) }
+        MenuItem { text: qsTr("화면 조정 초기화 (U)"); onTriggered: win.adjust("", 0) }
+    }
+
+    Menu {
         id: contextMenu
         MenuItem { text: qsTr("파일 열기… (Ctrl+O)"); onTriggered: openDialog.open() }
         MenuItem { text: qsTr("자막 파일 추가…"); enabled: !player.idle; onTriggered: subtitleDialog.open() }
@@ -399,6 +593,15 @@ ApplicationWindow {
         MenuItem { text: qsTr("구간 반복 해제"); enabled: player.loopA >= 0; onTriggered: player.clearAbLoop() }
         MenuItem { text: qsTr("현재 장면 저장 (S)"); enabled: !player.idle; onTriggered: win.takeScreenshot() }
         MenuSeparator {}
+        Menu {
+            title: qsTr("챕터")
+            enabled: player.chapters.length > 0
+            MenuItem { text: qsTr("다음 챕터 (Shift+PgDn)"); onTriggered: win.chapterStep(1) }
+            MenuItem { text: qsTr("이전 챕터 (Shift+PgUp)"); onTriggered: win.chapterStep(-1) }
+        }
+        MenuItem { text: qsTr("화면…"); enabled: !player.idle; onTriggered: pictureMenu.popup() }
+        MenuItem { text: qsTr("음량 평준화 (N)"); checkable: true; checked: win.normalize; enabled: !player.idle; onTriggered: win.toggleNormalize() }
+        MenuItem { text: qsTr("미니 플레이어 (P)"); checkable: true; checked: win.mini; enabled: !player.idle; onTriggered: win.toggleMini() }
         MenuItem { text: qsTr("미디어 정보 (I)"); checkable: true; checked: win.infoShown; onTriggered: win.infoShown = !win.infoShown }
         MenuItem { text: qsTr("항상 위 (Ctrl+T)"); checkable: true; checked: win.onTop; onTriggered: win.onTop = !win.onTop }
         MenuItem { text: qsTr("전체 화면 (Enter)"); onTriggered: win.toggleFullscreen() }
@@ -445,4 +648,18 @@ ApplicationWindow {
     Shortcut { sequence: "PgDown"; onActivated: player.playlistStep(1) }
     Shortcut { sequence: "Ctrl+O"; onActivated: openDialog.open() }
     Shortcut { sequence: "Ctrl+T"; onActivated: win.onTop = !win.onTop }
+    Shortcut { sequence: "P"; enabled: !player.idle; onActivated: win.toggleMini() }
+    Shortcut { sequence: "N"; enabled: !player.idle; onActivated: win.toggleNormalize() }
+    Shortcut { sequence: "Shift+PgDown"; onActivated: win.chapterStep(1) }
+    Shortcut { sequence: "Shift+PgUp"; onActivated: win.chapterStep(-1) }
+    Shortcut { sequence: "Ctrl+R"; onActivated: win.rotate() }
+    Shortcut { sequences: ["Ctrl+=", "Ctrl++"]; onActivated: win.adjust("video-zoom", 0.1) }
+    Shortcut { sequence: "Ctrl+-"; onActivated: win.adjust("video-zoom", -0.1) }
+    Shortcut { sequence: "Q"; onActivated: win.adjust("brightness", -5) }
+    Shortcut { sequence: "W"; onActivated: win.adjust("brightness", 5) }
+    Shortcut { sequence: "E"; onActivated: win.adjust("contrast", -5) }
+    Shortcut { sequence: "R"; onActivated: win.adjust("contrast", 5) }
+    Shortcut { sequence: "T"; onActivated: win.adjust("saturation", -5) }
+    Shortcut { sequence: "Y"; onActivated: win.adjust("saturation", 5) }
+    Shortcut { sequence: "U"; onActivated: win.adjust("", 0) }
 }

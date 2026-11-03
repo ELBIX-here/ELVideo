@@ -15,6 +15,7 @@ add_library(elv_core STATIC
     src/capture/WgcCapture.h
     src/capture/WgcCapture.cpp
     src/output/EncoderProbe.cpp
+    src/output/MediaFile.cpp
     src/output/MediaWriter.h
     src/output/MediaWriter.cpp
     src/output/ReplayStream.h

@@ -3,6 +3,7 @@
 #include "src/CrashHandler.h"
 #include "src/Desktop.h"
 #include "src/Hotkeys.h"
+#include "src/LibraryModel.h"
 #include "src/RecorderModel.h"
 #include "src/ScreenCapture.h"
 #include "src/SourceModel.h"
@@ -113,6 +114,7 @@ int main(int argc, char* argv[]) {
     TrayIcon tray(recorder, settings, desktop);
 
     ScreenCapture screenCapture(settings);
+    LibraryModel library(settings);
     // From the tray menu: give the menu time to close so it is not in the picture.
     QObject::connect(&tray, &TrayIcon::screenshotRequested, &screenCapture,
                      [&] { QTimer::singleShot(250, &screenCapture, &ScreenCapture::start); });
@@ -140,6 +142,7 @@ int main(int argc, char* argv[]) {
     engine.addImageProvider(QStringLiteral("thumbnail"), new ThumbnailProvider);
     engine.addImageProvider(QStringLiteral("preview"), new PreviewProvider(recorder.engine()));
     engine.addImageProvider(QStringLiteral("frozen"), new FrozenImageProvider(screenCapture));
+    engine.addImageProvider(QStringLiteral("library"), new LibraryThumbnailProvider);
     auto* context = engine.rootContext();
     context->setContextProperty(QStringLiteral("engineVersion"), QString::fromLatin1(elv::version()));
     context->setContextProperty(QStringLiteral("captureSupported"), platform.captureSupported);
@@ -150,6 +153,7 @@ int main(int argc, char* argv[]) {
     context->setContextProperty(QStringLiteral("tray"), &tray);
     context->setContextProperty(QStringLiteral("desktop"), &desktop);
     context->setContextProperty(QStringLiteral("screenCapture"), &screenCapture);
+    context->setContextProperty(QStringLiteral("library"), &library);
 #ifdef NDEBUG
     context->setContextProperty(QStringLiteral("debugBuild"), false);
 #else

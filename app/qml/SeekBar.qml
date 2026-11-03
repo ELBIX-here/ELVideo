@@ -65,20 +65,36 @@ Item {
         color: Theme.text
     }
 
-    // Time tip above the cursor.
+    // Preview above the cursor: a frame near the hovered time (keyframe) and the time.
     Rectangle {
+        id: preview
         visible: (area.containsMouse || bar.dragging) && bar.duration > 0
         readonly property double tipTime: bar.dragging ? bar.dragTime : bar.timeAt(area.mouseX)
+        readonly property bool hasFrame: seekThumbs.source.length > 0 && Math.abs(seekThumbs.time - tipTime) < 15
+        onTipTimeChanged: if (visible) seekThumbs.request(Math.round(tipTime * 2) / 2)
         x: Math.max(0, Math.min(bar.width - width, (bar.dragging ? bar.xAt(bar.dragTime) : area.mouseX) - width / 2))
         y: -height - 8
-        width: tip.implicitWidth + 14
-        height: 24
+        width: hasFrame ? seekThumbs.thumbWidth + 6 : tip.implicitWidth + 14
+        height: hasFrame ? seekThumbs.thumbHeight + 30 : 24
         radius: 6
         color: Theme.surface
+        border.color: Theme.border
+        Image {
+            visible: preview.hasFrame
+            x: 3
+            y: 3
+            width: seekThumbs.thumbWidth
+            height: seekThumbs.thumbHeight
+            source: seekThumbs.source
+            cache: false
+            asynchronous: false
+        }
         Text {
             id: tip
-            anchors.centerIn: parent
-            text: bar.format(parent.tipTime)
+            anchors.horizontalCenter: parent.horizontalCenter
+            anchors.bottom: parent.bottom
+            anchors.bottomMargin: 4
+            text: bar.format(preview.tipTime)
             color: Theme.text
             font.family: Theme.monoFont
             font.pixelSize: 12

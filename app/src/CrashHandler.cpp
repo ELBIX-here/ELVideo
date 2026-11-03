@@ -12,6 +12,7 @@
 #include <csignal>
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 #include <exception>
 #include <thread>
 
@@ -32,12 +33,63 @@ EXCEPTION_POINTERS* g_exception = nullptr;
 DWORD g_crashedThread = 0;
 volatile LONG g_crashing = 0;
 
+// Next to the dump: the crashed thread's call stack with symbols, readable without
+// a debugger. Walks a copy of the exception context; the thread is blocked meanwhile.
+void writeStack(const wchar_t* dumpPath) {
+    if (!g_exception || !g_exception->ContextRecord) return;
+    wchar_t path[MAX_PATH + 64];
+    swprintf_s(path, L"%s.txt", dumpPath);
+    FILE* out = nullptr;
+    if (_wfopen_s(&out, path, L"w") != 0 || !out) return;
+
+    const HANDLE process = GetCurrentProcess();
+    const HANDLE thread = OpenThread(THREAD_ALL_ACCESS, FALSE, g_crashedThread);
+    SymSetOptions(SYMOPT_UNDNAME | SYMOPT_DEFERRED_LOADS | SYMOPT_LOAD_LINES);
+    SymInitialize(process, nullptr, TRUE);
+
+    CONTEXT context = *g_exception->ContextRecord;
+    STACKFRAME64 frame{};
+    frame.AddrPC = {context.Rip, 0, AddrModeFlat};
+    frame.AddrFrame = {context.Rbp, 0, AddrModeFlat};
+    frame.AddrStack = {context.Rsp, 0, AddrModeFlat};
+    fprintf(out, "exception 0x%08lX at 0x%llX, thread %lu\n\n", g_exception->ExceptionRecord->ExceptionCode,
+            static_cast<unsigned long long>(context.Rip), g_crashedThread);
+
+    alignas(SYMBOL_INFO) char symbolBuffer[sizeof(SYMBOL_INFO) + 256];
+    for (int i = 0; i < 48; ++i) {
+        if (!StackWalk64(IMAGE_FILE_MACHINE_AMD64, process, thread ? thread : GetCurrentThread(), &frame, &context, nullptr,
+                         SymFunctionTableAccess64, SymGetModuleBase64, nullptr) ||
+            frame.AddrPC.Offset == 0)
+            break;
+        const DWORD64 pc = frame.AddrPC.Offset;
+        char module[MAX_PATH] = "?";
+        if (const DWORD64 base = SymGetModuleBase64(process, pc)) GetModuleFileNameA(reinterpret_cast<HMODULE>(base), module, MAX_PATH);
+        const char* moduleName = strrchr(module, '\\') ? strrchr(module, '\\') + 1 : module;
+
+        auto* symbol = reinterpret_cast<SYMBOL_INFO*>(symbolBuffer);
+        symbol->SizeOfStruct = sizeof(SYMBOL_INFO);
+        symbol->MaxNameLen = 255;
+        DWORD64 displacement = 0;
+        IMAGEHLP_LINE64 line{sizeof(IMAGEHLP_LINE64)};
+        DWORD lineDisplacement = 0;
+        const bool named = SymFromAddr(process, pc, &displacement, symbol);
+        const bool hasLine = SymGetLineFromAddr64(process, pc, &lineDisplacement, &line);
+        fprintf(out, "%2d  %s!%s+0x%llx", i, moduleName, named ? symbol->Name : "?", static_cast<unsigned long long>(displacement));
+        if (hasLine) fprintf(out, "  (%s:%lu)", line.FileName, line.LineNumber);
+        fprintf(out, "\n");
+    }
+    SymCleanup(process);
+    if (thread) CloseHandle(thread);
+    fclose(out);
+}
+
 void writeDump() {
     SYSTEMTIME t;
     GetLocalTime(&t);
     wchar_t path[MAX_PATH + 64];
     swprintf_s(path, L"%s%04u%02u%02u-%02u%02u%02u_%lu.dmp", g_dumpPrefix, t.wYear, t.wMonth, t.wDay, t.wHour,
                t.wMinute, t.wSecond, GetCurrentProcessId());
+    writeStack(path);
 
     const HANDLE file = CreateFileW(path, GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
     if (file == INVALID_HANDLE_VALUE) return;

@@ -27,6 +27,7 @@ function Mpv([object[]]$command) {
     $script:writer.WriteLine((@{ command = $command; request_id = $script:id } | ConvertTo-Json -Compress -Depth 5))
     while ($true) {
         $line = $script:reader.ReadLine()
+        if ($null -eq $line) { throw "mpv IPC closed" }
         if ($line -match "`"request_id`":$($script:id)[,}]") { return ($line | ConvertFrom-Json) }
     }
 }
@@ -87,6 +88,52 @@ Check "UI: A-B button sets A" ((Get "ab-loop-a") -ne "no") ("a={0}" -f (Get "ab-
 Mpv @("set_property", "ab-loop-a", "no") | Out-Null
 powershell -NoProfile -ExecutionPolicy Bypass -File "$t\ui_invoke.ps1" "재생 (Space)" | Out-Null; Start-Sleep -Milliseconds 300
 Check "UI: play button resumes" ((Get "pause") -eq $false) ("pause={0}" -f (Get "pause"))
+
+# --- P2: picture adjustments, audio normalization (what the menus and keys send)
+Mpv @("set_property", "video-aspect-override", "4:3") | Out-Null
+Mpv @("set_property", "video-rotate", 90) | Out-Null
+Mpv @("vf", "toggle", "hflip") | Out-Null
+Mpv @("add", "brightness", 5) | Out-Null
+$vf = (Get "vf") | ForEach-Object { $_.name }
+Check "picture: aspect 4:3, rotate 90, hflip, brightness +5" ([math]::Abs((Get "video-aspect-override") - 4 / 3) -lt 0.001 -and (Get "video-rotate") -eq 90 -and ($vf -contains "hflip") -and (Get "brightness") -eq 5) ("aspect {0}, rotate {1}, vf [{2}], brightness {3}" -f (Get "video-aspect-override"), (Get "video-rotate"), ($vf -join ","), (Get "brightness"))
+Mpv @("vf", "toggle", "hflip") | Out-Null; Mpv @("set_property", "video-rotate", 0) | Out-Null; Mpv @("set_property", "video-aspect-override", "-1") | Out-Null; Mpv @("set_property", "brightness", 0) | Out-Null
+Mpv @("af", "toggle", "dynaudnorm") | Out-Null
+$af = (Get "af") | ForEach-Object { $_.name }
+Check "audio normalization (dynaudnorm)" ($af -contains "dynaudnorm") ("af [{0}]" -f ($af -join ","))
+Mpv @("af", "toggle", "dynaudnorm") | Out-Null
+
+# --- P2: chapters from an FFmpeg ffmetadata file (mpv's chapters-file)
+$chapters = Join-Path $env:TEMP "elv_chapters.ffmeta"
+@(";FFMETADATA1",
+  "[CHAPTER]", "TIMEBASE=1/1000", "START=0", "END=5000", "title=Intro",
+  "[CHAPTER]", "TIMEBASE=1/1000", "START=5000", "END=9000", "title=Middle",
+  "[CHAPTER]", "TIMEBASE=1/1000", "START=9000", "END=12000", "title=End") | Set-Content -Encoding ascii $chapters
+Mpv @("set_property", "options/chapters-file", $chapters) | Out-Null
+Mpv @("loadfile", "$media\a_sync.mp4") | Out-Null
+$count = WaitFor "chapter-list/count" { param($v) $v -eq 3 } 5000
+Mpv @("set_property", "pause", $true) | Out-Null; Mpv @("seek", "1", "absolute+exact") | Out-Null; WaitFor "seeking" { param($v) -not $v } | Out-Null; Start-Sleep -Milliseconds 300
+Mpv @("add", "chapter", 1) | Out-Null
+$chapterPos = WaitFor "time-pos" { param($v) [math]::Abs($v - 5) -lt 0.1 } 3000
+Check "chapters: 3 loaded, next chapter -> 5 s" ($count -eq 3 -and [math]::Abs($chapterPos - 5) -lt 0.1) ("count {0}, at {1:N2}" -f $count, $chapterPos)
+Mpv @("set_property", "options/chapters-file", "") | Out-Null; Remove-Item $chapters
+
+# --- P2: mini player (button), then back
+Add-Type @"
+using System; using System.Runtime.InteropServices;
+public static class PipWin { [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr h, out RECT r);
+  [DllImport("user32.dll")] public static extern int GetWindowLong(IntPtr h, int i);
+  public struct RECT { public int L, T, R, B; } }
+"@
+$p.Refresh(); $hwnd = $p.MainWindowHandle; $r = New-Object PipWin+RECT
+[PipWin]::GetWindowRect($hwnd, [ref]$r) | Out-Null; $before = $r.R - $r.L
+powershell -NoProfile -ExecutionPolicy Bypass -File "$t\ui_invoke.ps1" "미니 플레이어 (P)" | Out-Null; Start-Sleep -Milliseconds 800
+[PipWin]::GetWindowRect($hwnd, [ref]$r) | Out-Null; $miniWidth = $r.R - $r.L
+$topmost = ([PipWin]::GetWindowLong($hwnd, -20) -band 0x8) -ne 0
+Check "mini player: 480 px wide, always on top" ($miniWidth -eq 480 -and $topmost) ("{0} -> {1} px, topmost {2}" -f $before, $miniWidth, $topmost)
+powershell -NoProfile -ExecutionPolicy Bypass -File "$t\ui_invoke.ps1" "원래 크기로 (P)" | Out-Null; Start-Sleep -Milliseconds 800
+[PipWin]::GetWindowRect($hwnd, [ref]$r) | Out-Null
+$topmost = ([PipWin]::GetWindowLong($hwnd, -20) -band 0x8) -ne 0
+Check "mini player: restored" (($r.R - $r.L) -eq $before -and -not $topmost) ("{0} px, topmost {1}" -f ($r.R - $r.L), $topmost)
 
 # --- next file (HEVC), resume position
 Mpv @("seek", "7.5", "absolute+exact") | Out-Null; Start-Sleep -Milliseconds 300

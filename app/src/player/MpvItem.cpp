@@ -137,6 +137,9 @@ MpvItem::MpvItem(QQuickItem* parent) : QQuickFramebufferObject(parent) {
     setOption(mpv, "autocreate-playlist", QStringLiteral("filter"));  // the folder's videos
     setOption(mpv, "watch-later-dir", data + QStringLiteral("/watch_later"));
     setOption(mpv, "resume-playback", QStringLiteral("yes"));
+    // Remember the position and sync offsets only. mpv's default list also restores
+    // tracks and filters, so a file closed with video/audio off would reopen blank.
+    setOption(mpv, "watch-later-options", QStringLiteral("start,sub-delay,audio-delay"));
     setOption(mpv, "screenshot-format", QStringLiteral("png"));
 #ifndef NDEBUG
     // Test hook: ELV_PLAYER_IPC=<pipe name> opens mpv's JSON IPC for scripts/test (debug only:
@@ -172,8 +175,6 @@ MpvItem::~MpvItem() {
 }
 
 QQuickFramebufferObject::Renderer* MpvItem::createRenderer() const {
-    window()->setPersistentGraphics(true);
-    window()->setPersistentSceneGraph(true);
     return new MpvRenderer(const_cast<MpvItem*>(this), mpv_);
 }
 
@@ -301,8 +302,10 @@ void MpvItem::setMpvProperty(const QString& name, const QVariant& value) {
     case QMetaType::Int:
     case QMetaType::LongLong:
     case QMetaType::Double: {
-        double number = value.toDouble();
-        result = mpv_set_property(mpv_.get(), key.constData(), MPV_FORMAT_DOUBLE, &number);
+        // As text: mpv parses it for the property's own type (integer properties such
+        // as sub-margin-y reject MPV_FORMAT_DOUBLE, and QML numbers are doubles).
+        const QByteArray text = QByteArray::number(value.toDouble(), 'g', 12);
+        result = mpv_set_property_string(mpv_.get(), key.constData(), text.constData());
         break;
     }
     default: {

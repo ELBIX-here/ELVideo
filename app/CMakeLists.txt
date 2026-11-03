@@ -14,6 +14,8 @@ qt_add_executable(elv_app WIN32
     src/Desktop.cpp
     src/Hotkeys.h
     src/Hotkeys.cpp
+    src/LibraryModel.h
+    src/LibraryModel.cpp
     src/OverlayGeometry.h
     src/OverlayGeometry.cpp
     src/RecorderModel.h
@@ -38,7 +40,9 @@ if(ELV_HAVE_MPV)
         src/player/MpvItem.h
         src/player/MpvItem.cpp
         src/player/PlayerMain.h
-        src/player/PlayerMain.cpp)
+        src/player/PlayerMain.cpp
+        src/player/SeekThumbnailer.h
+        src/player/SeekThumbnailer.cpp)
     # src: "player/MpvItem.h"; src/player: the generated QML type registration includes <MpvItem.h>
     target_include_directories(elv_app PRIVATE src src/player)
     target_compile_definitions(elv_app PRIVATE ELV_HAVE_MPV)
@@ -74,6 +78,7 @@ qt_add_qml_module(elv_app
         qml/RegionFrame.qml
         qml/PreviewPanel.qml
         qml/ScreenshotOverlay.qml
+        qml/LibraryPage.qml
         ${ELV_PLAYER_QML}
 )
 

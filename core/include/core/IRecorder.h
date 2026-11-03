@@ -4,6 +4,7 @@
 #include "core/Types.h"
 
 #include <chrono>
+#include <filesystem>
 #include <memory>
 #include <optional>
 #include <string>
@@ -68,6 +69,10 @@ const char* codecName(VideoCodec codec);  // "H.264", "HEVC", "AV1"
 // Encodes a few frames with `codec` on the GPU that would record `source` and
 // reports which encoder was used, or why it failed. Takes up to a second.
 EncoderProbe probeVideoEncoder(VideoCodec codec, const CaptureSource& source, bool preferHardware = true);
+
+// Duration, size and (withFrame) one frame of a video file Media Foundation can
+// read (ELVideo's own MP4s, most H.264/HEVC files). Any thread; blocks briefly.
+std::optional<MediaFileInfo> probeMediaFile(const std::filesystem::path& path, bool withFrame);
 
 // Cameras Media Foundation can open.
 std::vector<WebcamDevice> enumerateWebcams();

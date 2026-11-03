@@ -48,6 +48,14 @@ RecordingSession::RecordingSession(const RecordSettings& settings) : settings_(s
         width_ = static_cast<std::uint32_t>(std::max(2, size.Width & ~1));
         height_ = static_cast<std::uint32_t>(std::max(2, size.Height & ~1));
     }
+    // HEVC/AV1 encoders round the size up to a multiple of 8 and fill the extra
+    // columns with padding that ends up in the picture (green). Round down instead;
+    // the converter letterboxes the few pixels of difference.
+    const bool replayH264 = settings.replaySeconds > 0;  // replay always encodes H.264
+    if (settings.video.codec != VideoCodec::H264 && !replayH264) {
+        width_ = std::max(16u, width_ & ~7u);
+        height_ = std::max(16u, height_ & ~7u);
+    }
 
     converter_ = std::make_unique<VideoConverter>(*device_, width_, height_, crop);
 

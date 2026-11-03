@@ -1,5 +1,6 @@
 #pragma once
 
+#include <chrono>
 #include <cstdint>
 #include <filesystem>
 #include <optional>
@@ -116,6 +117,14 @@ struct Thumbnail {
     std::uint32_t width = 0;
     std::uint32_t height = 0;
     std::vector<std::uint8_t> bgra;
+};
+
+// What probeMediaFile() reads from a video file.
+struct MediaFileInfo {
+    std::chrono::milliseconds duration{0};
+    std::uint32_t width = 0;
+    std::uint32_t height = 0;
+    std::optional<Thumbnail> frame;  // full size, about 1 s in (or 10 % for short files)
 };
 
 enum class RecorderState { Idle, Starting, Recording, Paused, Stopping, Error };
