@@ -34,6 +34,7 @@ class MpvItem : public QQuickFramebufferObject {
     Q_PROPERTY(QVariantList chapters READ chapters NOTIFY chaptersChanged)
     Q_PROPERTY(int playlistPos READ playlistPos NOTIFY playlistChanged)
     Q_PROPERTY(int playlistCount READ playlistCount NOTIFY playlistChanged)
+    Q_PROPERTY(QVariantList playlist READ playlist NOTIFY playlistChanged)  // mpv playlist: filename, current
     Q_PROPERTY(int videoWidth READ videoWidth NOTIFY videoSizeChanged)
     Q_PROPERTY(int videoHeight READ videoHeight NOTIFY videoSizeChanged)
     Q_PROPERTY(QString hwdec READ hwdec NOTIFY hwdecChanged)  // hwdec-current
@@ -60,6 +61,7 @@ public:
     Q_INVOKABLE void selectTrack(const QString& type, int id);  // id 0: off ("sub"/"audio"/"video")
     Q_INVOKABLE void addSubtitle(const QString& path);
     Q_INVOKABLE void playlistStep(int delta);
+    Q_INVOKABLE void playlistPlay(int index);
     // Saves the current video frame; returns the file path (empty on failure).
     Q_INVOKABLE QString screenshot(const QString& directory);
     // Remembers the position for the next time this file is opened.
@@ -87,6 +89,7 @@ public:
     QVariantList chapters() const { return chapters_; }
     int playlistPos() const { return playlistPos_; }
     int playlistCount() const { return playlistCount_; }
+    QVariantList playlist() const { return playlist_; }
     int videoWidth() const { return videoWidth_; }
     int videoHeight() const { return videoHeight_; }
     QString hwdec() const { return hwdec_; }
@@ -115,6 +118,7 @@ signals:
     void hwdecChanged();
     void fileLoaded();
     void endOfFile();
+    void playedToEnd(const QString& path);  // a file ran to its end (also mid-playlist)
     void error(const QString& message);
 
 private:
@@ -144,6 +148,7 @@ private:
     QVariantList chapters_;
     int playlistPos_ = -1;
     int playlistCount_ = 0;
+    QVariantList playlist_;
     int videoWidth_ = 0;
     int videoHeight_ = 0;
     QString hwdec_;

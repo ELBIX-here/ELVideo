@@ -140,6 +140,8 @@ MpvItem::MpvItem(QQuickItem* parent) : QQuickFramebufferObject(parent) {
     setOption(mpv, "volume-max", QStringLiteral("150"));
     setOption(mpv, "sub-auto", QStringLiteral("fuzzy"));  // movie.srt / movie.ko.smi next to the file
     setOption(mpv, "autocreate-playlist", QStringLiteral("filter"));  // the folder's videos
+    // ...but not its subfolders: a lecture series should not run on into the next part.
+    setOption(mpv, "directory-mode", QStringLiteral("ignore"));
     setOption(mpv, "watch-later-dir", data + QStringLiteral("/watch_later"));
     setOption(mpv, "resume-playback", QStringLiteral("yes"));
     // Remember the position and sync offsets only. mpv's default list also restores
@@ -160,6 +162,7 @@ MpvItem::MpvItem(QQuickItem* parent) : QQuickFramebufferObject(parent) {
         {"speed", MPV_FORMAT_DOUBLE},          {"ab-loop-a", MPV_FORMAT_NODE},      {"ab-loop-b", MPV_FORMAT_NODE},
         {"sub-delay", MPV_FORMAT_DOUBLE},      {"audio-delay", MPV_FORMAT_DOUBLE},  {"track-list", MPV_FORMAT_NODE},
         {"chapter-list", MPV_FORMAT_NODE},     {"playlist-pos", MPV_FORMAT_INT64},  {"playlist-count", MPV_FORMAT_INT64},
+        {"playlist", MPV_FORMAT_NODE},
         {"path", MPV_FORMAT_STRING},           {"media-title", MPV_FORMAT_STRING},  {"video-params/w", MPV_FORMAT_INT64},
         {"video-params/h", MPV_FORMAT_INT64},  {"hwdec-current", MPV_FORMAT_STRING}, {"idle-active", MPV_FORMAT_FLAG},
     };
@@ -196,6 +199,8 @@ void MpvItem::processEvents() {
                 const QString message = QString::fromUtf8(mpv_error_string(end->error));
                 spdlog::warn("mpv: cannot play: {}", message.toStdString());
                 emit error(message);
+            } else if (end->reason == MPV_END_FILE_REASON_EOF) {
+                emit playedToEnd(path_);  // still the file that ended; the next one's path comes later
             }
             break;
         }
@@ -262,6 +267,9 @@ void MpvItem::onProperty(const mpv_event_property& p) {
         emit playlistChanged();
     } else if (name == "playlist-count") {
         playlistCount_ = static_cast<int>(integer(0));
+        emit playlistChanged();
+    } else if (name == "playlist") {
+        playlist_ = node().toList();
         emit playlistChanged();
     } else if (name == "path") {
         path_ = text();
@@ -389,6 +397,10 @@ void MpvItem::addSubtitle(const QString& path) {
 
 void MpvItem::playlistStep(int delta) {
     command({delta > 0 ? QStringLiteral("playlist-next") : QStringLiteral("playlist-prev")});
+}
+
+void MpvItem::playlistPlay(int index) {
+    command({QStringLiteral("playlist-play-index"), index});
 }
 
 QString MpvItem::screenshot(const QString& directory) {

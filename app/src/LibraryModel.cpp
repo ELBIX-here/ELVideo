@@ -217,7 +217,7 @@ LibraryThumbnailProvider::LibraryThumbnailProvider() { pool_.setMaxThreadCount(3
 
 QQuickImageResponse* LibraryThumbnailProvider::requestImageResponse(const QString& id, const QSize& requestedSize) {
     auto* response = new LibraryResponse;
-    const QString path = QUrl::fromPercentEncoding(id.section(QLatin1Char('/'), 1).toLatin1());
+    const QString path = QUrl::fromPercentEncoding(id.section(QLatin1Char('/'), 1).toUtf8());  // the id arrives partly decoded (Hangul)
     const QSize size = requestedSize.isValid() ? requestedSize : QSize(320, 180);
     pool_.start([response, path, size] {
         QImage image;

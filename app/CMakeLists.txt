@@ -12,6 +12,8 @@ qt_add_executable(elv_app WIN32
     src/CrashHandler.cpp
     src/Desktop.h
     src/Desktop.cpp
+    src/FolderListing.h
+    src/FolderListing.cpp
     src/Hotkeys.h
     src/Hotkeys.cpp
     src/LibraryModel.h
@@ -26,6 +28,8 @@ qt_add_executable(elv_app WIN32
     src/SourceModel.cpp
     src/TrayIcon.h
     src/TrayIcon.cpp
+    src/WatchProgress.h
+    src/WatchProgress.cpp
     resources/elvideo.rc)
 set_target_properties(elv_app PROPERTIES OUTPUT_NAME ELVideo)
 
@@ -92,6 +96,9 @@ qt_add_qml_module(elv_app
         qml/ProductShadow.qml
         qml/Frost.qml
         qml/SearchField.qml
+        qml/SidebarItem.qml
+        qml/FolderPage.qml
+        qml/ContinuePage.qml
         ${ELV_PLAYER_QML}
 )
 

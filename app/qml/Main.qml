@@ -1,14 +1,15 @@
 import QtQuick
 import QtQuick.Controls
+import QtQuick.Dialogs
 import QtQuick.Layouts
 
 ApplicationWindow {
     id: root
 
-    width: 980
-    height: 660
-    minimumWidth: 720
-    minimumHeight: 520
+    width: 1160
+    height: 720
+    minimumWidth: 880
+    minimumHeight: 560
     visible: false  // shown when the splash finishes
     title: qsTr("ELVideo")
     color: Theme.background
@@ -34,8 +35,34 @@ ApplicationWindow {
     palette.placeholderText: Theme.textFaint
     font.family: Theme.fontFamily
 
-    property bool showSettings: false
-    property bool showLibrary: false
+    // The two halves of the app, in the sidebar: recording ("record", "recordings")
+    // and watching ("continue", "folder"), plus "settings".
+    property string section: "record"
+    property string folderRoot   // the library folder chosen in the sidebar
+    property string folderPath   // the folder shown under it
+    readonly property bool recordSide: section === "record" || section === "recordings"
+    readonly property bool barShown: recordSide || recorder.active
+
+    function openFolder(path) {
+        folderRoot = path
+        folderPath = path
+        section = "folder"
+    }
+    function addLibraryFolder(path) {
+        if (path.length === 0) return
+        const list = appSettings.libraryFolders.slice()
+        if (!list.some(f => f.toLowerCase() === path.toLowerCase())) list.push(path)
+        appSettings.libraryFolders = list
+        openFolder(path)
+    }
+    function removeLibraryFolder(path) {
+        appSettings.libraryFolders = appSettings.libraryFolders.filter(f => f !== path)
+        if (section === "folder" && folderRoot === path) section = "continue"
+    }
+    function folderName(path) {
+        const p = path.replace(/\\/g, "/").replace(/\/+$/, "")
+        return p.substring(p.lastIndexOf("/") + 1) || p
+    }
     property bool hiddenForRecording: false
     property bool wasActive: false
     property bool trayHintShown: false
@@ -164,7 +191,7 @@ ApplicationWindow {
             if (recorder.active === root.wasActive) return
             root.wasActive = recorder.active
             if (recorder.active) {
-                root.showSettings = false
+                root.section = "record"
                 root.recordingRegion = sources.regionMode && sources.hasRegion ? sources.regionGeometry
                                                                               : Qt.rect(0, 0, 0, 0)
                 if (appSettings.hideWindowWhileRecording && root.visible) {
@@ -206,120 +233,247 @@ ApplicationWindow {
         function onShowRequested() { root.showMain() }
     }
 
-    ColumnLayout {
-        anchors.fill: parent
-        anchors.margins: 20
-        anchors.topMargin: 16
-        spacing: 16
+    FolderDialog {
+        id: libraryFolderDialog
+        title: qsTr("동영상 폴더 추가")
+        onAccepted: root.addLibraryFolder(desktop.toLocalFile(selectedFolder))
+    }
 
-        // Header (the "sub-nav"): app mark and the section name on the left, the
-        // section's utility buttons on the right. Flat on the window background.
-        RowLayout {
-            Layout.fillWidth: true
-            spacing: 12
-            LogoMark {
-                Layout.preferredWidth: 28
-                Layout.preferredHeight: 28
+    RowLayout {
+        anchors.fill: parent
+        spacing: 0
+
+        // Sidebar: recording on top, watching below, settings at the bottom.
+        Rectangle {
+            Layout.preferredWidth: 232
+            Layout.fillHeight: true
+            color: Theme.sidebar
+            Rectangle {  // hairline against the content
+                anchors.right: parent.right
+                width: 1
+                height: parent.height
+                color: Theme.border
             }
-            Text {
-                text: recorder.replayMode ? qsTr("리플레이 버퍼") : recorder.active ? qsTr("녹화 중")
-                    : root.showLibrary ? qsTr("라이브러리") : root.showSettings ? qsTr("설정") : qsTr("화면 녹화")
-                color: Theme.text
-                font.family: Theme.displayFont
-                font.pixelSize: Theme.tagline
-                font.weight: Font.DemiBold
-                font.letterSpacing: Theme.tracking(Theme.tagline)
-            }
-            Item { Layout.fillWidth: true }
-            Text {
-                visible: !captureSupported
-                text: qsTr("이 시스템은 화면 캡처를 지원하지 않습니다")
-                color: Theme.danger
-                font.family: Theme.fontFamily
-                font.pixelSize: 12
-            }
-            IconButton {
-                glyph: Theme.iconLibrary
-                tip: qsTr("라이브러리")
-                checkedLook: root.showLibrary
-                onClicked: {
-                    root.showLibrary = !root.showLibrary
-                    root.showSettings = false
+
+            ColumnLayout {
+                anchors.fill: parent
+                anchors.margins: 12
+                anchors.topMargin: 18
+                spacing: 2
+
+                RowLayout {
+                    Layout.leftMargin: 8
+                    Layout.bottomMargin: 16
+                    spacing: 10
+                    LogoMark {
+                        Layout.preferredWidth: 26
+                        Layout.preferredHeight: 26
+                    }
+                    Text {
+                        text: "ELVideo"
+                        color: Theme.text
+                        font.family: Theme.displayFont
+                        font.pixelSize: 17
+                        font.weight: Font.DemiBold
+                        font.letterSpacing: Theme.tracking(17)
+                    }
                 }
-            }
-            IconButton {
-                visible: desktop.hasPlayer()
-                glyph: Theme.iconPlay
-                tip: qsTr("동영상 열기 (ELVideo 플레이어)")
-                onClicked: desktop.openInPlayer()
-            }
-            IconButton {
-                glyph: Theme.iconSettings
-                tip: root.showSettings ? qsTr("설정 닫기") : qsTr("설정")
-                checkedLook: root.showSettings
-                onClicked: {
-                    root.showSettings = !root.showSettings
-                    root.showLibrary = false
+
+                component Heading: Text {
+                    Layout.leftMargin: 10
+                    Layout.topMargin: 6
+                    Layout.bottomMargin: 2
+                    color: Theme.textDim
+                    font.family: Theme.fontFamily
+                    font.pixelSize: Theme.fine
+                    font.weight: Font.DemiBold
+                }
+
+                Heading { text: qsTr("녹화") }
+                SidebarItem {
+                    Layout.fillWidth: true
+                    text: qsTr("화면 녹화")
+                    glyph: Theme.iconMonitor
+                    current: root.section === "record"
+                    badge: recorder.active ? Theme.formatTime(recorder.replayMode ? recorder.replayBufferedSeconds * 1000 : recorder.elapsedMs) : ""
+                    badgeColor: Theme.record
+                    onClicked: root.section = "record"
+                }
+                SidebarItem {
+                    Layout.fillWidth: true
+                    text: qsTr("녹화한 파일")
+                    glyph: Theme.iconLibrary
+                    current: root.section === "recordings"
+                    badge: library.videoCount + library.imageCount > 0 ? String(library.videoCount + library.imageCount) : ""
+                    onClicked: root.section = "recordings"
+                }
+
+                Heading { text: qsTr("재생"); Layout.topMargin: 18 }
+                SidebarItem {
+                    Layout.fillWidth: true
+                    text: qsTr("이어서 보기")
+                    glyph: Theme.iconPlay
+                    current: root.section === "continue"
+                    badge: { const n = progress.revision >= 0 ? progress.inProgress(99).length : 0; return n > 0 ? String(n) : "" }
+                    onClicked: root.section = "continue"
+                }
+                Repeater {
+                    model: appSettings.libraryFolders
+                    SidebarItem {
+                        id: folderItem
+                        required property string modelData
+                        Layout.fillWidth: true
+                        text: root.folderName(modelData)
+                        glyph: Theme.iconFolder
+                        current: root.section === "folder" && root.folderRoot === modelData
+                        onClicked: root.openFolder(modelData)
+                        ToolTip.visible: hovered
+                        ToolTip.delay: 800
+                        ToolTip.text: desktop.nativePath(modelData)
+                        TapHandler {
+                            acceptedButtons: Qt.RightButton
+                            onTapped: folderMenu.popup()
+                        }
+                        AppMenu {
+                            id: folderMenu
+                            AppMenuItem { text: qsTr("열기"); onTriggered: root.openFolder(folderItem.modelData) }
+                            AppMenuItem { text: qsTr("탐색기에서 보기"); onTriggered: desktop.openFolder(folderItem.modelData) }
+                            AppMenuSeparator {}
+                            AppMenuItem {
+                                destructive: true
+                                text: qsTr("목록에서 빼기")
+                                onTriggered: root.removeLibraryFolder(folderItem.modelData)
+                            }
+                        }
+                    }
+                }
+                SidebarItem {
+                    Layout.fillWidth: true
+                    text: qsTr("폴더 추가…")
+                    glyph: "\uE710"
+                    addStyle: true
+                    onClicked: libraryFolderDialog.open()
+                }
+
+                Item { Layout.fillHeight: true }
+
+                SidebarItem {
+                    Layout.fillWidth: true
+                    visible: desktop.hasPlayer()
+                    text: qsTr("파일 열기…")
+                    glyph: "\uE8E5"
+                    onClicked: desktop.openInPlayer()
+                }
+                SidebarItem {
+                    Layout.fillWidth: true
+                    text: qsTr("설정")
+                    glyph: Theme.iconSettings
+                    current: root.section === "settings"
+                    onClicked: root.section = "settings"
                 }
             }
         }
 
-        // Pages fill the rest and scroll under the floating record bar, which shows
-        // them blurred through its frosted glass.
-        Item {
-            id: body
+        // Content: the section's title, then its page. Record pages run under the
+        // floating record bar, which shows them blurred through its frosted glass.
+        ColumnLayout {
             Layout.fillWidth: true
             Layout.fillHeight: true
-            readonly property real barInset: controlBar.height + 16
+            Layout.margins: 24
+            Layout.topMargin: 20
+            spacing: 16
 
-        StackLayout {
-            id: pages
-            anchors.fill: parent
-            currentIndex: recorder.active ? 2 : root.showLibrary ? 3 : root.showSettings ? 1 : 0
-            // Pages cross-fade in with a slight rise.
-            onCurrentIndexChanged: pageIn.restart()
-            ParallelAnimation {
-                id: pageIn
-                NumberAnimation { target: pages; property: "opacity"; from: 0; to: 1; duration: Theme.normal; easing.type: Easing.OutCubic }
-                NumberAnimation { target: pageShift; property: "y"; from: 8; to: 0; duration: Theme.normal; easing.type: Easing.OutCubic }
+            RowLayout {
+                Layout.fillWidth: true
+                visible: root.section !== "folder"
+                spacing: 12
+                Text {
+                    text: recorder.active && root.section === "record" ? (recorder.replayMode ? qsTr("리플레이 버퍼") : qsTr("녹화 중"))
+                        : ({ record: qsTr("화면 녹화"), recordings: qsTr("녹화한 파일"), continue: qsTr("이어서 보기"),
+                             settings: qsTr("설정") })[root.section] ?? ""
+                    color: Theme.text
+                    font.family: Theme.displayFont
+                    font.pixelSize: Theme.largeTitle
+                    font.weight: Font.DemiBold
+                    font.letterSpacing: Theme.tracking(Theme.largeTitle)
+                }
+                Item { Layout.fillWidth: true }
+                Text {
+                    visible: !captureSupported && root.recordSide
+                    text: qsTr("이 시스템은 화면 캡처를 지원하지 않습니다")
+                    color: Theme.danger
+                    font.family: Theme.fontFamily
+                    font.pixelSize: 12
+                }
             }
-            transform: Translate { id: pageShift }
-            SourcePicker {
-                bottomInset: body.barInset
-                onRegionRequested: root.selectRegion()
-            }
-            SettingsPage { bottomInset: body.barInset }
-            PreviewPanel { bottomInset: body.barInset }
-            LibraryPage {
-                bottomInset: body.barInset
-                onMessage: text => toast.showSaved(text, "")
-                onRecordRequested: root.showLibrary = false
-            }
-        }
 
-        Toast {
-            id: toast
-            anchors.left: parent.left
-            anchors.right: parent.right
-            anchors.bottom: controlBar.top
-            anchors.bottomMargin: 10
-        }
+            Item {
+                id: body
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                readonly property real barInset: root.barShown ? controlBar.height + 16 : 0
 
-        // The record bar's frosted glass, next to the pages it blurs.
-        Frost {
-            x: controlBar.x
-            y: controlBar.y
-            width: controlBar.width
-            height: controlBar.height
-            source: pages
-            radius: Theme.barRadius
-        }
-        ControlBar {
-            id: controlBar
-            anchors.left: parent.left
-            anchors.right: parent.right
-            anchors.bottom: parent.bottom
-        }
+                StackLayout {
+                    id: pages
+                    anchors.fill: parent
+                    currentIndex: root.section === "record" ? (recorder.active ? 2 : 0)
+                                : root.section === "recordings" ? 3
+                                : root.section === "continue" ? 4
+                                : root.section === "folder" ? 5 : 1
+                    // Pages cross-fade in with a slight rise.
+                    onCurrentIndexChanged: pageIn.restart()
+                    ParallelAnimation {
+                        id: pageIn
+                        NumberAnimation { target: pages; property: "opacity"; from: 0; to: 1; duration: Theme.normal; easing.type: Easing.OutCubic }
+                        NumberAnimation { target: pageShift; property: "y"; from: 8; to: 0; duration: Theme.normal; easing.type: Easing.OutCubic }
+                    }
+                    transform: Translate { id: pageShift }
+                    SourcePicker {
+                        bottomInset: body.barInset
+                        onRegionRequested: root.selectRegion()
+                    }
+                    SettingsPage { bottomInset: body.barInset }
+                    PreviewPanel { bottomInset: body.barInset }
+                    LibraryPage {
+                        bottomInset: body.barInset
+                        onMessage: text => toast.showSaved(text, "")
+                        onRecordRequested: root.section = "record"
+                    }
+                    ContinuePage { bottomInset: body.barInset }
+                    FolderPage {
+                        rootPath: root.folderRoot
+                        path: root.folderPath
+                        onPathChanged: root.folderPath = path
+                        bottomInset: body.barInset
+                    }
+                }
+
+                Toast {
+                    id: toast
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    anchors.bottom: root.barShown ? controlBar.top : parent.bottom
+                    anchors.bottomMargin: root.barShown ? 10 : 0
+                }
+
+                // The record bar's frosted glass, next to the pages it blurs.
+                Frost {
+                    visible: controlBar.visible
+                    x: controlBar.x
+                    y: controlBar.y
+                    width: controlBar.width
+                    height: controlBar.height
+                    source: pages
+                    radius: Theme.barRadius
+                }
+                ControlBar {
+                    id: controlBar
+                    visible: root.barShown
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    anchors.bottom: parent.bottom
+                }
+            }
         }
     }
 }

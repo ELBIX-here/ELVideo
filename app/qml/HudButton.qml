@@ -22,12 +22,12 @@ AbstractButton {
                 visible: control.glyph.length > 0
                 glyph: control.glyph
                 size: 13
-                color: Theme.hudText
+                color: control.checked ? "#2997FF" : Theme.hudText
             }
             Text {
                 anchors.verticalCenter: parent.verticalCenter
                 text: control.text
-                color: Theme.hudText
+                color: control.checked ? "#2997FF" : Theme.hudText
                 font.family: Theme.fontFamily
                 font.pixelSize: 13
             }
@@ -35,7 +35,8 @@ AbstractButton {
     }
     background: Rectangle {
         radius: height / 2
-        color: control.down ? Qt.rgba(1, 1, 1, 0.18) : control.hovered ? Theme.hudHover : "transparent"
+        color: control.checked ? Qt.rgba(0.161, 0.592, 1, 0.22)  // on: Sky Link Blue tint
+             : control.down ? Qt.rgba(1, 1, 1, 0.18) : control.hovered ? Theme.hudHover : "transparent"
         Behavior on color { ColorAnimation { duration: Theme.fast } }
     }
     scale: down ? Theme.pressScale : 1

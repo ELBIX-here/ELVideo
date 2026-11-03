@@ -142,7 +142,15 @@ Mpv @("playlist-next") | Out-Null
 $path = WaitFor "path" { param($v) $v -like "*b_hevc.mp4" }
 Start-Sleep -Milliseconds 800
 Check "next file (HEVC) plays" (($path -like "*b_hevc.mp4") -and ((Get "video-codec") -match "HEVC|hevc|265")) ("{0}, {1}" -f (Split-Path $path -Leaf), (Get "video-codec"))
+Mpv @("seek", "0", "absolute") | Out-Null
+Mpv @("set_property", "pause", $false) | Out-Null; Start-Sleep -Milliseconds 1500  # play a little before closing
 $pipe.Dispose(); $p.CloseMainWindow() | Out-Null; $p.WaitForExit(5000) | Out-Null; if (-not $p.HasExited) { $p.Kill() }
+
+# Closing writes how far into the video it got, for the library pages.
+$saved = (Get-Content (Join-Path $env:LOCALAPPDATA "ELVideo\progress.json") -Raw -Encoding UTF8 | ConvertFrom-Json).videos |
+    Where-Object { $_.path -like "*b_hevc.mp4" } | Select-Object -First 1
+Check "watch progress saved on close" ($saved -and $saved.position -gt 0 -and $saved.duration -gt 5 -and -not $saved.watched) `
+    ("position {0:N2} of {1:N2}, watched {2}" -f $saved.position, $saved.duration, $saved.watched)
 
 $p = Start-Player "$media\a_sync.mp4"
 $resumed = WaitFor "time-pos" { param($v) $v -gt 7 }

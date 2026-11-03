@@ -8,6 +8,7 @@
 #include "player/SeekThumbnailer.h"
 #include "Desktop.h"
 #include "Fonts.h"
+#include "WatchProgress.h"
 #include "core/IRecorder.h"
 
 #include <QApplication>
@@ -48,6 +49,7 @@ int runPlayer(int argc, char* argv[]) {
     AppSettings settings;
     settings.load();
     Desktop desktop;
+    WatchProgress progress;
 
     SeekThumbnailer seekThumbs;
     QQmlApplicationEngine engine;
@@ -56,6 +58,7 @@ int runPlayer(int argc, char* argv[]) {
     context->setContextProperty(QStringLiteral("seekThumbs"), &seekThumbs);
     context->setContextProperty(QStringLiteral("desktop"), &desktop);
     context->setContextProperty(QStringLiteral("appSettings"), &settings);
+    context->setContextProperty(QStringLiteral("progress"), &progress);
     context->setContextProperty(QStringLiteral("initialFile"),
                                 file.isEmpty() ? QString() : QUrl::fromLocalFile(QFileInfo(file).absoluteFilePath()).toString());
 #ifndef NDEBUG

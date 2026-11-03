@@ -30,6 +30,7 @@ QtObject {
     readonly property color separator: pick("#E8E8ED", "#38383A")        // hairlines inside groups
     readonly property color mediaBackground: pick("#E8E8ED", "#000000")  // letterbox behind thumbnails
     readonly property color popupBorder: pick("#D2D2D7", "#3A3A3C")
+    readonly property color sidebar: pick("#ECECF0", "#232325")          // the main window's section list
 
     // The one shadow in the system, under pictures (thumbnails) resting on a surface.
     readonly property color productShadow: Qt.rgba(0, 0, 0, dark ? 0.45 : 0.22)
@@ -107,6 +108,16 @@ QtObject {
     readonly property string iconChevronDown: ""
     readonly property string iconChevronUp: ""
     readonly property string iconRegion: ""
+
+    // Seconds as a clock: 38:20, 1:02:10.
+    function formatClock(seconds) {
+        const s = Math.max(0, Math.floor(seconds))
+        const pad = n => (n < 10 ? "0" : "") + n
+        return s >= 3600 ? Math.floor(s / 3600) + ":" + pad(Math.floor(s / 60) % 60) + ":" + pad(s % 60)
+                         : Math.floor(s / 60) + ":" + pad(s % 60)
+    }
+    // A thumbnail of any video or image file (LibraryThumbnailProvider).
+    function thumbnailUrl(path) { return "image://library/v/" + encodeURIComponent(path) }
 
     function formatTime(ms) {
         const s = Math.floor(ms / 1000)

@@ -117,6 +117,10 @@ void AppSettings::load() {
     closeToTray = value(j, "closeToTray", closeToTray);
     appearance = str(j, "appearance", appearance);
     if (appearance != QLatin1String("light") && appearance != QLatin1String("dark")) appearance = QStringLiteral("system");
+    libraryFolders.clear();
+    if (const auto it = j.find("libraryFolders"); it != j.end() && it->is_array())
+        for (const auto& f : *it)
+            if (f.is_string()) libraryFolders.push_back(QString::fromStdString(f.get<std::string>()));
     lastSource = str(j, "lastSource", lastSource);
     emit changed();
     loading_ = false;
@@ -160,6 +164,11 @@ void AppSettings::save() {
         {"showFloatingBar", showFloatingBar},
         {"closeToTray", closeToTray},
         {"appearance", appearance.toStdString()},
+        {"libraryFolders", [this] {
+             auto folders = nlohmann::json::array();
+             for (const QString& f : libraryFolders) folders.push_back(f.toStdString());
+             return folders;
+         }()},
         {"lastSource", lastSource.toStdString()},
     };
 

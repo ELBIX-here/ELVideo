@@ -152,7 +152,9 @@ ApplicationWindow {
         if (player.idle) return
         close.accepted = false
         if (closeWhenIdle) return
+        win.recordProgress()
         closeWhenIdle = true
+        progress.flush()
         player.saveResumePosition()
         player.command(["stop"])
         stopTimeout.start()
@@ -165,6 +167,25 @@ ApplicationWindow {
         id: stopTimeout
         interval: 2000
         onTriggered: { player.command(["set_property", "options/ao", "null"]); Qt.callLater(Qt.quit) }
+    }
+
+    // How far into each video, for the library pages (resuming at the position
+    // itself is mpv's watch-later). Every 5 s while playing, on pause and at the end.
+    function recordProgress() {
+        if (win.closeWhenIdle) return  // stopping resets the position; the closing handler recorded it
+        if (!player.idle && player.path.length > 0 && player.duration > 0)
+            progress.update(player.path, player.position, player.duration)
+    }
+    Timer {
+        interval: 5000
+        repeat: true
+        running: !player.idle && !player.paused
+        onTriggered: win.recordProgress()
+    }
+    Connections {
+        target: player
+        function onPausedChanged() { win.recordProgress() }
+        function onPlayedToEnd(path) { progress.setWatched(path, true) }
     }
 
     MpvItem {
@@ -184,7 +205,7 @@ ApplicationWindow {
         id: hideTimer
         interval: 2500
         onTriggered: {
-            if (player.paused || player.idle || controlsHover.hovered || win.menuOpen) restart()
+            if (player.paused || player.idle || controlsHover.hovered || playlistHover.hovered || win.menuOpen) restart()
             else win.controlsShown = false
         }
     }
@@ -325,6 +346,188 @@ ApplicationWindow {
         borderColor: Qt.rgba(1, 1, 1, 0.10)
     }
 
+    // What is playing, top left, with the controls.
+    Column {
+        x: 24
+        y: 18
+        visible: !win.mini && !player.idle && controls.visible
+        opacity: controls.opacity
+        spacing: 2
+        Text {
+            text: player.title.replace(/\.[^.\/]+$/, "")  // media-title is the file name
+            color: "white"
+            font.family: Theme.fontFamily
+            font.pixelSize: 15
+            font.weight: Font.DemiBold
+            style: Text.Raised
+            styleColor: Qt.rgba(0, 0, 0, 0.4)
+        }
+        Text {
+            visible: player.playlistCount > 1
+            text: win.folderName + " · " + (player.playlistPos + 1) + " / " + player.playlistCount
+            color: Theme.hudTextDim
+            font.family: Theme.fontFamily
+            font.pixelSize: 12
+            style: Text.Raised
+            styleColor: Qt.rgba(0, 0, 0, 0.4)
+        }
+    }
+    readonly property string folderName: {
+        const p = player.path.replace(/\\/g, "/")
+        const dir = p.substring(0, p.lastIndexOf("/"))
+        return dir.substring(dir.lastIndexOf("/") + 1)
+    }
+
+    // Playlist: the folder's videos with how far each is watched; click to play.
+    property bool playlistShown: false
+    readonly property bool playlistVisible: playlistShown && !win.mini && !player.idle
+                                            && (controls.visible || playlistHover.hovered)
+    Frost {
+        x: playlistPanel.x
+        y: playlistPanel.y
+        width: playlistPanel.width
+        height: playlistPanel.height
+        visible: playlistPanel.visible
+        opacity: playlistPanel.opacity
+        source: player
+        radius: Theme.cardRadius
+        tint: Qt.rgba(0.11, 0.11, 0.12, 0.62)
+        base: "black"
+        borderColor: Qt.rgba(1, 1, 1, 0.10)
+    }
+    Item {
+        id: playlistPanel
+        anchors.right: parent.right
+        anchors.top: parent.top
+        anchors.rightMargin: 16
+        anchors.topMargin: 16
+        width: 300
+        height: Math.max(160, controls.y - 28)
+        opacity: win.playlistVisible ? 1 : 0
+        visible: opacity > 0
+        Behavior on opacity { NumberAnimation { duration: Theme.normal; easing.type: Easing.OutCubic } }
+        HoverHandler { id: playlistHover }
+        readonly property int rev: progress.revision
+
+        RowLayout {
+            id: playlistHeader
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.top: parent.top
+            anchors.margins: 16
+            Text {
+                Layout.fillWidth: true
+                text: win.folderName
+                elide: Text.ElideRight
+                color: "white"
+                font.family: Theme.fontFamily
+                font.pixelSize: 13
+                font.weight: Font.DemiBold
+            }
+            Text {
+                text: {
+                    let watched = playlistPanel.rev >= 0 ? 0 : 0
+                    for (const e of player.playlist) if (progress.get(e.filename).watched) ++watched
+                    return qsTr("%1 / %2 다 봄").arg(watched).arg(player.playlist.length)
+                }
+                color: Theme.hudTextDim
+                font.family: Theme.fontFamily
+                font.pixelSize: 12
+            }
+        }
+        ListView {
+            id: playlistView
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.top: playlistHeader.bottom
+            anchors.bottom: parent.bottom
+            anchors.margins: 8
+            anchors.topMargin: 8
+            clip: true
+            spacing: 2
+            boundsBehavior: Flickable.StopAtBounds
+            model: player.playlist
+            currentIndex: player.playlistPos
+            ScrollIndicator.vertical: ScrollIndicator {}
+            onVisibleChanged: if (visible) positionViewAtIndex(Math.max(0, player.playlistPos), ListView.Contain)
+            delegate: AbstractButton {
+                id: entry
+                required property var modelData
+                required property int index
+                readonly property bool current: index === player.playlistPos
+                readonly property var e: playlistPanel.rev >= 0 ? progress.get(modelData.filename) : ({})
+                readonly property bool watched: e.watched === true
+                readonly property real fraction: watched ? 1 : e.duration > 0 ? Math.min(1, (e.position || 0) / e.duration) : 0
+                width: ListView.view.width
+                height: 46
+                hoverEnabled: true
+                Accessible.name: label.text
+                onClicked: player.playlistPlay(index)
+                background: Rectangle {
+                    radius: 10
+                    color: entry.current ? Qt.rgba(1, 1, 1, 0.12) : entry.hovered ? Theme.hudHover : "transparent"
+                }
+                contentItem: RowLayout {
+                    spacing: 10
+                    Rectangle {  // watched / now playing
+                        Layout.leftMargin: 8
+                        Layout.preferredWidth: 18
+                        Layout.preferredHeight: 18
+                        radius: 9
+                        color: entry.current ? "white" : entry.watched ? Theme.accent : "transparent"
+                        border.width: entry.current || entry.watched ? 0 : 1.5
+                        border.color: Qt.rgba(1, 1, 1, 0.3)
+                        Icon {
+                            anchors.centerIn: parent
+                            anchors.horizontalCenterOffset: entry.current ? 1 : 0
+                            visible: entry.current || entry.watched
+                            glyph: entry.current ? Theme.iconPlay : Theme.iconCheck
+                            size: entry.current ? 8 : 9
+                            color: entry.current ? "black" : "white"
+                        }
+                    }
+                    ColumnLayout {
+                        Layout.fillWidth: true
+                        spacing: 5
+                        Text {
+                            id: label
+                            Layout.fillWidth: true
+                            text: {
+                                const p = entry.modelData.filename.replace(/\\/g, "/")
+                                return p.substring(p.lastIndexOf("/") + 1).replace(/\.[^.]+$/, "")
+                            }
+                            elide: Text.ElideRight
+                            color: entry.watched && !entry.current ? Theme.hudTextDim : "white"
+                            font.family: Theme.fontFamily
+                            font.pixelSize: 13
+                        }
+                        Rectangle {
+                            Layout.fillWidth: true
+                            height: 2
+                            radius: 1
+                            color: Qt.rgba(1, 1, 1, 0.14)
+                            Rectangle {
+                                width: parent.width * entry.fraction
+                                height: parent.height
+                                radius: 1
+                                color: "white"
+                            }
+                        }
+                    }
+                    Text {
+                        Layout.rightMargin: 8
+                        visible: entry.e.duration > 0
+                        text: Theme.formatClock(entry.e.duration || 0)
+                        color: Theme.hudTextDim
+                        font.family: Theme.fontFamily
+                        font.pixelSize: 11
+                        font.features: { "tnum": 1 }
+                    }
+                }
+            }
+        }
+    }
+
     // Controls.
     Rectangle {
         id: controls
@@ -450,6 +653,18 @@ ApplicationWindow {
                 glyph: "\uE8FD"  // BulletedList
                 tip: qsTr("챕터 (Shift+PgUp / PgDn)")
                 onClicked: chapterMenu.popup()
+            }
+            HudButton {
+                visible: player.playlistCount > 1
+                glyph: "\uE8FD"
+                text: qsTr("재생목록")
+                ToolTip.visible: hovered
+                ToolTip.delay: 600
+                ToolTip.text: qsTr("재생목록 (F6)")
+                checked: win.playlistShown
+                checkable: true
+                onClicked: win.playlistShown = !win.playlistShown
+                Accessible.name: qsTr("재생목록")
             }
             HudButton {
                 text: Number(player.speed.toFixed(2)) + "×"
@@ -675,6 +890,7 @@ ApplicationWindow {
         AppMenuItem { text: qsTr("음량 평준화 (N)"); checkable: true; checked: win.normalize; enabled: !player.idle; onTriggered: win.toggleNormalize() }
         AppMenuItem { text: qsTr("미니 플레이어 (P)"); checkable: true; checked: win.mini; enabled: !player.idle; onTriggered: win.toggleMini() }
         AppMenuItem { text: qsTr("미디어 정보 (I)"); checkable: true; checked: win.infoShown; onTriggered: win.infoShown = !win.infoShown }
+        AppMenuItem { text: qsTr("재생목록 (F6)"); checkable: true; checked: win.playlistShown; enabled: player.playlistCount > 1; onTriggered: win.playlistShown = !win.playlistShown }
         AppMenuItem { text: qsTr("항상 위 (Ctrl+T)"); checkable: true; checked: win.onTop; onTriggered: win.onTop = !win.onTop }
         AppMenuItem { text: qsTr("전체 화면 (Enter)"); onTriggered: win.toggleFullscreen() }
     }
@@ -712,6 +928,7 @@ ApplicationWindow {
     Shortcut { sequence: "L"; onActivated: win.abLoop() }
     Shortcut { sequence: "S"; onActivated: win.takeScreenshot() }
     Shortcut { sequence: "I"; onActivated: win.infoShown = !win.infoShown }
+    Shortcut { sequence: "F6"; enabled: player.playlistCount > 1; onActivated: { win.playlistShown = !win.playlistShown; win.showControls() } }
     Shortcut { sequence: "<"; onActivated: { player.addSubDelay(-0.1); win.osd(qsTr("자막 싱크 %1초").arg((player.subDelay - 0.1).toFixed(1))) } }
     Shortcut { sequence: ">"; onActivated: { player.addSubDelay(0.1); win.osd(qsTr("자막 싱크 %1초").arg((player.subDelay + 0.1).toFixed(1))) } }
     Shortcut { sequence: "["; onActivated: player.addAudioDelay(-0.05) }
