@@ -97,12 +97,38 @@ elvideo-cli audio                                           :: 오디오 출력/
 elvideo-cli record m0 30 out.mp4 --audio both               :: 시스템 소리 + 마이크 (none|system|mic|both)
 elvideo-cli record m0 30 out.mp4 --audio mic --mic-device "{0.0.1.00000000}.{...}"
 elvideo-cli synccheck out.mp4                               :: 화면 깜빡임과 비프음의 시간 차(A/V 싱크)
+elvideo-cli record m0 10 out.mp4 --region 100,50,1280,720   :: 모니터의 일부 영역만 (물리 픽셀)
+elvideo-cli record m0 10 out.mp4 --codec hevc               :: HEVC (자동으로 일반 MP4)
+elvideo-cli record m0 10 out.mp4 --preview mid.png          :: 녹화 중간에 미리보기 프레임 저장
+elvideo-cli record w3 10 out.mp4 --audio system --app-audio :: 녹화하는 창의 앱 소리만 (Windows 11)
+elvideo-cli record m0 10 out.mp4 --webcam test              :: 웹캠 오버레이 (default|test|장치 id)
+elvideo-cli record m0 60 out.mp4 --replay 30 --save-at 40,55  :: 리플레이 버퍼, 40초와 55초에 out_replayN.mp4 저장
+elvideo-cli webcams                                         :: 카메라 목록과 id
 ```
+`info`는 등록된 비디오 인코더 목록과, 모니터마다 H.264/HEVC/AV1을 실제로 짧게 인코딩해 본 결과를 보여 줍니다.
 
 `record`의 오디오 기본값은 `none`이고, `stress`와 `selftest`는 엔진 기본값(시스템 소리 켬)으로 녹음합니다.
 `probe`는 오디오 트랙의 길이(비디오와의 차이), 끊김, 최대 레벨도 보여 줍니다.
 
 A/V 싱크 확인: `scripts\test\sync_run.ps1`이 흰 화면 깜빡임과 1 kHz 비프음을 같은 시계로 내는 창을 띄워 녹화하고 `synccheck`를 돌립니다(이어폰/스피커에서 작은 비프음이 납니다).
+
+## v2·v3 기능
+
+| 기능 | 앱에서 | 동작 방식 |
+|---|---|---|
+| 영역 녹화 | 소스 선택의 **영역** 탭 → 화면을 드래그 | 모니터를 캡처한 뒤 변환 단계(VideoProcessor)에서 잘라 냅니다. 출력 크기는 영역 크기. 녹화 중에는 영역 둘레에 빨간 테두리가 뜨며 영상에는 찍히지 않습니다 |
+| 녹화 중 미리보기 | 녹화 중 메인 창 | 인코더에 들어가는 NV12 프레임을 GPU에서 줄여 초당 약 10장 읽어 옵니다(1~3 ms). 영역 자르기와 웹캠까지 파일 그대로 보입니다. 기본 설정은 녹화 중 메인 창을 숨기므로 트레이에서 열면 보입니다 |
+| HEVC / AV1 | 설정 → 비디오 → 코덱 | 시작할 때 각 코덱을 실제로 짧게 인코딩해 보고 쓸 수 없는 코덱은 비활성으로 보여 줍니다(주 모니터 GPU 기준). Media Foundation의 fMP4는 H.264 전용이라 HEVC/AV1은 일반 MP4로 저장됩니다 |
+| 앱 소리만 녹음 | 설정 → 오디오 → "창을 녹화할 때 그 앱 소리만" | WASAPI 프로세스 루프백(Windows 11). 녹화하는 창의 프로세스와 자식 프로세스 소리만 담깁니다. 디스플레이·영역 녹화에는 적용되지 않습니다 |
+| 웹캠 오버레이 | 설정 → 웹캠 | Media Foundation으로 카메라를 BGRA로 받아 변환 단계의 두 번째 입력 스트림으로 겹칩니다. 위치(네 모서리), 크기(10~50%), 좌우 반전. 화면이 멈춰 있어도 카메라 프레임마다 다시 합성합니다. 카메라는 녹화 중에만 켜집니다 |
+| 리플레이 버퍼 | 녹화 바의 리플레이 버튼, 저장 `Ctrl+Shift+F11` | SinkWriter가 fMP4를 메모리 스트림에 쓰고, 최근 N초 분량의 조각만 보관합니다(메모리 일정). 저장할 때는 창 시작 직전 키프레임에서 첫 조각을 잘라 시간값을 0부터로 다시 써서 파일로 냅니다. 파일 이름은 `ELVideo_Replay_<날짜-시간>.mp4` |
+
+검증 결과(이 PC):
+- **영역**: 800×450 녹화 정확, 끊김 0. 화면 밖으로 걸친 영역은 잘리고, 완전히 밖이면 오류.
+- **HEVC**: Intel QSV 하드웨어로 녹화. NVIDIA 쪽 모니터는 MF가 소프트웨어 HEVC를 고릅니다(1080p60에서 CPU 약 6%). AV1은 두 GPU 모두 사용할 수 없음으로 판정.
+- **앱 소리만**: 다른 프로세스의 연속음이 빠짐(무음 92% vs 시스템 소리 1%). 싱크 차이 평균 +15~19 ms.
+- **웹캠**: 이 PC의 카메라는 Media Foundation에 잡히지 않아 내장 테스트 패턴(`test`)으로 합성·위치·반전·움직임을 확인했습니다. 실제 카메라 경로는 시험하지 못했습니다. 카메라가 없으면 경고만 띄우고 녹화는 계속됩니다.
+- **리플레이**: 10초 창 → 10.7~11.8초, 8초 창 → 9.6초(창 + 다음 키프레임까지 최대 2초). 끊김 0, A/V ±15 ms 이내. 60초 동안 메모리 일정.
 
 ## 오디오 (Phase 5)
 
@@ -171,6 +197,9 @@ WGC 프레임(BGRA) ─▶ VideoConverter ─▶ 최신 NV12 텍스처 ─▶ Fr
 ## 알려진 문제
 
 - **Intel Quick Sync + Media Foundation SinkWriter 핸들 누수**: Intel QSV 하드웨어 인코더로 녹화할 때마다 핸들 3개(Event, 레지스트리 Key, WaitCompletionPacket)가 남습니다. 엔진 코드 없이 MF SinkWriter만 만들었다 해제해도 재현되고(`leakcheck`의 `bare MF SinkWriter`), NVIDIA 인코더나 소프트웨어 인코더에서는 생기지 않습니다. 녹화 1,000번에 핸들 3,000개 수준이라 실사용에는 지장이 없습니다. 메모리·스레드·GPU 메모리는 늘지 않습니다(100회 반복에서 확인). 없애려면 SinkWriter 대신 인코더 MFT를 직접 구동해야 해서 보류했습니다.
+- **NVIDIA GPU의 HEVC**: Media Foundation이 NVIDIA/DX12 HEVC 하드웨어 인코더 대신 소프트웨어 HEVC(HEVCVideoExtension)를 고릅니다. 녹화는 되지만 CPU를 씁니다.
+- **실제 웹캠 미검증**: 카메라 경로(MJPEG/YUY2 → RGB32 변환 포함)는 이 PC에서 시험하지 못했습니다.
+- **리플레이 버퍼는 H.264만**: 조각난 MP4로 버퍼를 만드는데 MF가 HEVC/AV1을 fMP4로 쓰지 못합니다.
 - **오디오 장치 클럭 차이**: 장치의 실제 샘플 속도는 QPC와 아주 조금 다를 수 있습니다. 차이가 20 ms 쌓이면 그 자리에서 무음을 넣거나 잘라 맞추므로, 몇 분에 한 번 아주 짧은 끊김이 생길 수 있습니다(이 PC의 2분 녹화에서는 보정이 한 번도 일어나지 않음). 리샘플링으로 부드럽게 맞추는 것은 이후 과제입니다.
 - **캡처 아이템**: `GraphicsCaptureItem`을 만들 때마다 OS가 ALPC 포트를 하나 열고 프로세스가 끝날 때까지 유지합니다. 그래서 아이템을 소스별로 캐시해 재사용하고(창이 닫히거나 모니터가 빠지면 캐시에서 제거), 같은 소스를 반복 녹화해도 늘지 않습니다.
 

@@ -1,5 +1,7 @@
 #include "Record.h"
 
+#include "util/ImageIO.h"
+
 #include "core/IRecorder.h"
 
 #include <windows.h>
@@ -79,6 +81,9 @@ public:
             std::printf("[finished] reason=%s, %.2fs recorded, %llu frames\n", reasonName(reason),
                         stats.elapsed.count() / 1000.0, static_cast<unsigned long long>(stats.framesEncoded));
         cv_.notify_all();
+    }
+    void onReplaySaved(const std::filesystem::path& path, std::chrono::milliseconds length) override {
+        std::printf("[replay saved] %.2fs -> %s\n", length.count() / 1000.0, winrt::to_string(path.wstring()).c_str());
     }
     void onWarning(const std::string& message) override { std::fprintf(stderr, "[warning] %s\n", message.c_str()); }
     void onError(const std::string& message) override {
@@ -217,8 +222,39 @@ std::optional<RecordArgs> parseRecordArgs(int argc, wchar_t** argv) {
             args.audio.captureMicrophone = v == L"mic" || v == L"both";
             if (!args.audio.enabled() && v != L"none") return std::nullopt;
         }
+        else if (a == L"--app-audio") args.appAudio = true;
+        else if (a == L"--replay" && hasValue) args.replaySeconds = std::stod(argv[++i]);
+        else if (a == L"--save-at" && hasValue) {
+            std::wstring list = argv[++i];
+            for (std::size_t pos = 0; pos < list.size();) {
+                const auto comma = list.find(L',', pos);
+                args.saveAt.push_back(std::stoi(list.substr(pos, comma - pos)));
+                pos = comma == std::wstring::npos ? list.size() : comma + 1;
+            }
+        }
+        else if (a == L"--webcam" && hasValue) {
+            // device id from `elvideo-cli webcams`, "default" (first camera) or "test" (pattern)
+            elv::WebcamOverlay w;
+            const std::wstring_view v = argv[++i];
+            w.deviceId = v == L"default" ? L"" : std::wstring(v);
+            args.webcam = w;
+        }
         else if (a == L"--system-device" && hasValue) args.audio.systemDeviceId = argv[++i];
         else if (a == L"--mic-device" && hasValue) args.audio.microphoneDeviceId = argv[++i];
+        else if (a == L"--preview" && hasValue) args.previewPng = argv[++i];
+        else if (a == L"--codec" && hasValue) {
+            const std::wstring_view v = argv[++i];
+            if (v == L"h264") args.video.codec = elv::VideoCodec::H264;
+            else if (v == L"hevc") args.video.codec = elv::VideoCodec::HEVC;
+            else if (v == L"av1") args.video.codec = elv::VideoCodec::AV1;
+            else return std::nullopt;
+        }
+        else if (a == L"--region" && hasValue) {
+            // x,y,width,height in physical pixels of the source
+            elv::CaptureRegion r;
+            if (swscanf_s(argv[++i], L"%d,%d,%d,%d", &r.x, &r.y, &r.width, &r.height) != 4) return std::nullopt;
+            args.region = r;
+        }
         else if (a.starts_with(L"--")) return std::nullopt;
         else positional.push_back(a);
     }
@@ -235,6 +271,16 @@ int runRecord(const RecordArgs& args, const elv::CaptureSource& source) {
     settings.video = args.video;
     settings.container = args.container;
     settings.audio = args.audio;
+    if (args.appAudio && source.kind == elv::SourceKind::Window) {
+        DWORD pid = 0;
+        GetWindowThreadProcessId(reinterpret_cast<HWND>(source.handle), &pid);
+        settings.audio.captureSystem = true;
+        settings.audio.systemProcessId = pid;
+        std::printf("[app audio] process %lu\n", pid);
+    }
+    settings.region = args.region;
+    settings.webcam = args.webcam;
+    settings.replaySeconds = args.replaySeconds;
     settings.outputPath = std::filesystem::absolute(args.output);
 
     EventLog log(true);
@@ -263,6 +309,22 @@ int runRecord(const RecordArgs& args, const elv::CaptureSource& source) {
         sleepUntil(startTime + std::chrono::seconds(elapsed + 1), [&] { return !active(); });
         ++elapsed;
         if (elapsed == args.pauseAt) recorder->pause();
+        if (std::find(args.saveAt.begin(), args.saveAt.end(), elapsed) != args.saveAt.end()) {
+            auto path = settings.outputPath;
+            path.replace_filename(path.stem().wstring() + std::format(L"_replay{}.mp4", elapsed));
+            recorder->saveReplay(path);
+        }
+        if (!args.previewPng.empty() && elapsed == std::max(1, args.seconds / 2)) {
+            const auto t0 = std::chrono::steady_clock::now();
+            if (const auto p = recorder->preview(480, 270)) {
+                elv::savePixelsAsPng(p->bgra.data(), p->width, p->height, p->width * 4, args.previewPng);
+                std::printf("[preview] %ux%u in %.1f ms -> %s\n", p->width, p->height,
+                            std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count(),
+                            winrt::to_string(args.previewPng.wstring()).c_str());
+            } else {
+                std::printf("[preview] none\n");
+            }
+        }
         if (elapsed == args.resumeAt) recorder->resume();
 
         const auto s = log.stats();

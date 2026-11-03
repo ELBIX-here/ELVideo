@@ -10,6 +10,7 @@
 #include <spdlog/spdlog.h>
 
 #include <algorithm>
+#include <cmath>
 #include <vector>
 
 namespace {
@@ -125,6 +126,7 @@ void SourceModel::refresh() {
     // Keep the choice across refreshes; fall back to the primary monitor.
     if (!find(selectedId_)) selectedId_ = all_.empty() ? QString() : all_.front().id;
     emit selectionChanged();  // the title may have changed too
+    emit regionChanged();     // new thumbnail generation; the region's monitor may be gone
 }
 
 void SourceModel::rebuildVisible() {
@@ -160,6 +162,87 @@ void SourceModel::setSelectedId(const QString& id) {
 QString SourceModel::selectedTitle() const {
     const auto* entry = find(selectedId_);
     return entry ? entry->title : QString();
+}
+
+bool SourceModel::setRegionFromOverlay(QWindow* overlay, const QRectF& rect) {
+    if (!overlay) return false;
+    const auto hwnd = reinterpret_cast<HWND>(overlay->winId());
+    const HMONITOR monitor = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
+    MONITORINFO info{};
+    info.cbSize = sizeof(info);
+    RECT window{};
+    if (!GetMonitorInfoW(monitor, &info) || !GetWindowRect(hwnd, &window) || overlay->width() <= 0) return false;
+
+    // The overlay covers the monitor; scale its logical coordinates to physical pixels.
+    const double scale = static_cast<double>(window.right - window.left) / overlay->width();
+    const QRectF r = rect.normalized();
+    spdlog::info("region overlay {},{} {}x{} window ({},{})-({},{}) monitor ({},{})-({},{}) rect {},{} {}x{}",
+                 overlay->x(), overlay->y(), overlay->width(), overlay->height(), window.left, window.top,
+                 window.right, window.bottom, info.rcMonitor.left, info.rcMonitor.top, info.rcMonitor.right,
+                 info.rcMonitor.bottom, r.x(), r.y(), r.width(), r.height());
+    const int monitorWidth = info.rcMonitor.right - info.rcMonitor.left;
+    const int monitorHeight = info.rcMonitor.bottom - info.rcMonitor.top;
+    const int offsetX = window.left - info.rcMonitor.left;
+    const int offsetY = window.top - info.rcMonitor.top;
+    const int left = std::clamp(static_cast<int>(std::lround(r.left() * scale)) + offsetX, 0, monitorWidth);
+    const int top = std::clamp(static_cast<int>(std::lround(r.top() * scale)) + offsetY, 0, monitorHeight);
+    const int right = std::clamp(static_cast<int>(std::lround(r.right() * scale)) + offsetX, left, monitorWidth);
+    const int bottom = std::clamp(static_cast<int>(std::lround(r.bottom() * scale)) + offsetY, top, monitorHeight);
+    // Even sizes: NV12 and H.264 need them.
+    const int width = (right - left) & ~1;
+    const int height = (bottom - top) & ~1;
+    if (width < 16 || height < 16) return false;
+
+    elv::CaptureSource source;
+    source.kind = elv::SourceKind::Monitor;
+    source.handle = reinterpret_cast<std::uintptr_t>(monitor);
+    regionMonitorId_ = idOf(source);
+    region_ = {left, top, width, height};
+    regionGeometry_ = QRectF(overlay->x() + left / scale - offsetX / scale, overlay->y() + top / scale - offsetY / scale,
+                             width / scale, height / scale);
+    regionMode_ = true;
+    ++generation_;
+    emit regionChanged();
+    emit selectionChanged();
+    return true;
+}
+
+void SourceModel::setRegionMode(bool on) {
+    if (on == regionMode_) return;
+    regionMode_ = on;
+    emit regionChanged();
+    emit selectionChanged();
+}
+
+bool SourceModel::hasRegion() const { return find(regionMonitorId_) != nullptr; }
+
+QString SourceModel::regionTitle() const {
+    const auto* monitor = find(regionMonitorId_);
+    if (!monitor) return {};
+    return tr("영역 %1×%2 · %3").arg(region_.width).arg(region_.height).arg(monitor->title);
+}
+
+QString SourceModel::regionThumbnail() const {
+    if (!hasRegion()) return {};
+    return QStringLiteral("image://thumbnail/%1/%2/%3,%4,%5,%6")
+        .arg(generation_)
+        .arg(regionMonitorId_)
+        .arg(region_.x)
+        .arg(region_.y)
+        .arg(region_.width)
+        .arg(region_.height);
+}
+
+std::optional<std::pair<elv::CaptureSource, elv::CaptureRegion>> SourceModel::activeRegion() const {
+    if (!regionMode_) return std::nullopt;
+    const auto* monitor = find(regionMonitorId_);
+    if (!monitor) return std::nullopt;
+    return std::make_pair(monitor->source, region_);
+}
+
+QString SourceModel::recordingTitle() const {
+    if (regionMode_) return regionTitle();
+    return selectedTitle();
 }
 
 int SourceModel::monitorCount() const {
@@ -233,14 +316,17 @@ ThumbnailProvider::ThumbnailProvider() {
 
 QQuickImageResponse* ThumbnailProvider::requestImageResponse(const QString& id, const QSize& requestedSize) {
     auto* response = new ThumbnailResponse;
-    const QString sourceId = id.section(QLatin1Char('/'), 1);
+    const QString sourceId = id.section(QLatin1Char('/'), 1, 1);
     const auto source = SourceModel::parseId(sourceId);
+    std::optional<elv::CaptureRegion> region;
+    if (const QStringList r = id.section(QLatin1Char('/'), 2, 2).split(QLatin1Char(',')); r.size() == 4)
+        region = elv::CaptureRegion{r[0].toInt(), r[1].toInt(), r[2].toInt(), r[3].toInt()};
     const QSize size = requestedSize.isValid() ? requestedSize : QSize(400, 225);
 
-    pool_.start([response, source, size] {
+    pool_.start([response, source, size, region] {
         QImage image;
         if (source) {
-            if (const auto thumb = elv::captureThumbnail(*source, size.width(), size.height())) {
+            if (const auto thumb = elv::captureThumbnail(*source, size.width(), size.height(), region)) {
                 image = QImage(thumb->bgra.data(), static_cast<int>(thumb->width), static_cast<int>(thumb->height),
                                static_cast<int>(thumb->width * 4), QImage::Format_RGB32)
                             .copy();

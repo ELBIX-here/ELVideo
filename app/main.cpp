@@ -95,7 +95,9 @@ int main(int argc, char* argv[]) {
     TrayIcon tray(recorder, settings, desktop);
 
     Hotkeys hotkeys;
-    const auto applyHotkeys = [&] { hotkeys.setSequences(settings.hotkeyStartStop, settings.hotkeyPause); };
+    const auto applyHotkeys = [&] {
+        hotkeys.setSequences(settings.hotkeyStartStop, settings.hotkeyPause, settings.hotkeyReplay);
+    };
     QObject::connect(&settings, &AppSettings::changed, &hotkeys, applyHotkeys);
     applyHotkeys();
     QObject::connect(&hotkeys, &Hotkeys::activated, &recorder, [&](int id) {
@@ -103,11 +105,14 @@ int main(int argc, char* argv[]) {
             recorder.toggle();
         else if (id == Hotkeys::Pause)
             recorder.togglePause();
+        else if (id == Hotkeys::Replay)
+            recorder.replayHotkey();
     });
     QObject::connect(&tray, &TrayIcon::quitRequested, &app, &QCoreApplication::quit);
 
     QQmlApplicationEngine engine;
     engine.addImageProvider(QStringLiteral("thumbnail"), new ThumbnailProvider);
+    engine.addImageProvider(QStringLiteral("preview"), new PreviewProvider(recorder.engine()));
     auto* context = engine.rootContext();
     context->setContextProperty(QStringLiteral("engineVersion"), QString::fromLatin1(elv::version()));
     context->setContextProperty(QStringLiteral("captureSupported"), platform.captureSupported);
@@ -123,6 +128,8 @@ int main(int argc, char* argv[]) {
     QObject::connect(&engine, &QQmlApplicationEngine::objectCreationFailed, &app,
                      [] { QCoreApplication::exit(-1); }, Qt::QueuedConnection);
     engine.loadFromModule("ELVideo", "Main");
+    // Codec availability for the settings page; after the splash so startup stays quick.
+    QTimer::singleShot(4000, &recorder, &RecorderModel::probeCodecs);
 
     const int result = app.exec();
     spdlog::info("ELVideo exiting");

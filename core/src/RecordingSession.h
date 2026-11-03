@@ -1,11 +1,16 @@
 #pragma once
 
 #include "core/Types.h"
+#include "util/D3DDevice.h"
 
 #include <atomic>
+#include <chrono>
+#include <filesystem>
 #include <cstdint>
 #include <functional>
 #include <memory>
+#include <mutex>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -18,6 +23,9 @@ class MediaWriter;
 class FramePacer;
 class WasapiSource;
 class AudioMixer;
+class PreviewRenderer;
+class WebcamSource;
+class ReplayStream;
 
 struct SessionStats {
     std::uint64_t captured = 0;    // frames delivered by WGC
@@ -27,6 +35,7 @@ struct SessionStats {
     std::uint64_t droppedBusy = 0;  // ticks with no free encoder surface (back-pressure)
     float systemPeak = -1.0f;      // audio peak since the last stats() call; -1 if not recorded
     float microphonePeak = -1.0f;
+    double replayBufferedSeconds = 0;
 
     std::uint64_t dropped() const { return droppedLate + droppedBusy; }
 };
@@ -52,6 +61,13 @@ public:
     void stop();
     void pause();
     void resume();
+
+    bool replay() const { return replay_ != nullptr; }
+    // Replay mode: writes the buffered seconds to `path`; nullopt if nothing is buffered.
+    std::optional<std::chrono::milliseconds> saveReplay(const std::filesystem::path& path);
+
+    // The current output frame scaled down; nullopt before the first frame. Any thread.
+    std::optional<Thumbnail> preview(std::uint32_t maxWidth, std::uint32_t maxHeight);
 
     // Not const: reading the audio peaks resets them.
     SessionStats stats();
@@ -81,6 +97,20 @@ private:
     int microphoneSource_ = -1;
     std::atomic<bool> audioBegun_ = false;
     std::atomic<bool> audioWriteFailed_ = false;
+
+    // Webcam overlay: the last screen frame is kept so camera frames can be composited
+    // while the screen is static. composeMutex_ serializes the converter.
+    std::unique_ptr<WebcamSource> webcam_;
+    winrt::com_ptr<ID3D11Texture2D> screenCopy_;
+    std::uint32_t screenWidth_ = 0;
+    std::uint32_t screenHeight_ = 0;
+    std::mutex composeMutex_;
+    void composeScreen(ID3D11Texture2D* texture, std::uint32_t width, std::uint32_t height);
+
+    winrt::com_ptr<ReplayStream> replay_;  // replay buffer mode
+
+    std::mutex previewMutex_;
+    std::unique_ptr<PreviewRenderer> previewRenderer_;
 
     std::atomic<std::uint64_t> captured_ = 0;
     std::atomic<std::uint64_t> encoded_ = 0;

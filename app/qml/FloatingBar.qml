@@ -62,7 +62,7 @@ Window {
                 width: 10
                 height: 10
                 radius: 5
-                color: recorder.paused ? Theme.accent : Theme.record
+                color: recorder.paused || recorder.replayMode ? Theme.accent : Theme.record
                 property real blink: 1
                 opacity: recorder.state === "recording" ? blink : 1
                 SequentialAnimation on blink {
@@ -76,7 +76,8 @@ Window {
             Text {
                 anchors.verticalCenter: parent.verticalCenter
                 width: 84
-                text: Theme.formatTime(recorder.elapsedMs)
+                text: recorder.replayMode ? Theme.formatTime(recorder.replayBufferedSeconds * 1000)
+                                          : Theme.formatTime(recorder.elapsedMs)
                 color: Theme.text
                 font.family: Theme.monoFont
                 font.pixelSize: 15
@@ -86,10 +87,11 @@ Window {
                 anchors.verticalCenter: parent.verticalCenter
                 width: 32
                 height: 32
-                glyph: recorder.paused ? Theme.iconPlay : Theme.iconPause
-                tip: recorder.paused ? qsTr("다시 시작") : qsTr("일시정지")
+                glyph: recorder.replayMode ? Theme.iconSave : recorder.paused ? Theme.iconPlay : Theme.iconPause
+                iconColor: recorder.replayMode ? Theme.accent : Theme.text
+                tip: recorder.replayMode ? qsTr("리플레이 저장") : recorder.paused ? qsTr("다시 시작") : qsTr("일시정지")
                 enabled: recorder.active
-                onClicked: recorder.togglePause()
+                onClicked: recorder.replayMode ? recorder.saveReplay() : recorder.togglePause()
             }
             IconButton {
                 anchors.verticalCenter: parent.verticalCenter

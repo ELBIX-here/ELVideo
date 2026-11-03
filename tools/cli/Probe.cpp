@@ -260,7 +260,10 @@ int runProbe(const std::filesystem::path& path, const std::filesystem::path& png
     const LONGLONG last = times.empty() ? 0 : times.back();
 
     const double duration = samples ? (last - first + frameHns) / 1e7 : 0.0;
-    std::printf("codec      : %s\n", subtype == MFVideoFormat_H264 ? "H.264" : "other");
+    std::printf("codec      : %s\n", subtype == MFVideoFormat_H264   ? "H.264"
+                                      : subtype == MFVideoFormat_HEVC ? "HEVC"
+                                      : subtype == MFVideoFormat_AV1  ? "AV1"
+                                                                      : "other");
     std::printf("size       : %ux%u\n", width, height);
     std::printf("frame rate : %u/%u\n", fpsNum, fpsDen);
     std::printf("frames     : %llu (keyframes %llu, gaps %llu)\n", static_cast<unsigned long long>(samples),

@@ -55,6 +55,7 @@ TrayIcon::TrayIcon(RecorderModel& recorder, AppSettings& settings, Desktop& desk
     menu_.addSeparator();
     toggleAction_ = menu_.addAction(QString(), &recorder_, &RecorderModel::toggle);
     pauseAction_ = menu_.addAction(QString(), &recorder_, &RecorderModel::togglePause);
+    replayAction_ = menu_.addAction(QString(), &recorder_, &RecorderModel::replayHotkey);
     menu_.addSeparator();
     menu_.addAction(tr("녹화 폴더 열기"), this,
                     [&settings, &desktop] { desktop.openFolder(settings.effectiveOutputDir()); });
@@ -67,6 +68,7 @@ TrayIcon::TrayIcon(RecorderModel& recorder, AppSettings& settings, Desktop& desk
     });
     connect(&recorder_, &RecorderModel::stateChanged, this, &TrayIcon::update);
     connect(&recorder_, &RecorderModel::statsChanged, this, &TrayIcon::update);
+    connect(&recorder_, &RecorderModel::startedChanged, this, &TrayIcon::update);
 
     update();
     tray_.show();
@@ -80,16 +82,21 @@ void TrayIcon::update() {
     const QString state = recorder_.state();
     const bool active = recorder_.active();
 
-    toggleAction_->setText(active ? tr("녹화 정지") : tr("녹화 시작"));
+    const bool replay = recorder_.replayMode();
+    toggleAction_->setText(replay ? tr("리플레이 버퍼 끄기") : active ? tr("녹화 정지") : tr("녹화 시작"));
     toggleAction_->setEnabled(!recorder_.busy());
     pauseAction_->setText(recorder_.paused() ? tr("다시 시작") : tr("일시정지"));
-    pauseAction_->setEnabled(active);
+    pauseAction_->setEnabled(active && !replay);
+    replayAction_->setText(replay ? tr("리플레이 저장") : tr("리플레이 버퍼 켜기"));
+    replayAction_->setEnabled(replay || (!active && !recorder_.busy()));
 
     const QIcon& icon = !active ? idleIcon_ : recorder_.paused() ? pausedIcon_ : recordingIcon_;
     if (tray_.icon().cacheKey() != icon.cacheKey()) tray_.setIcon(icon);
 
     QString tip = QStringLiteral("ELVideo");
-    if (state == QLatin1String("recording"))
+    if (replay)
+        tip += tr(" — 리플레이 버퍼 %1초").arg(static_cast<int>(recorder_.replayBufferedSeconds()));
+    else if (state == QLatin1String("recording"))
         tip += tr(" — 녹화 중 ") + formatElapsed(recorder_.elapsedMs());
     else if (state == QLatin1String("paused"))
         tip += tr(" — 일시정지 ") + formatElapsed(recorder_.elapsedMs());

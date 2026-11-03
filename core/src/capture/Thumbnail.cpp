@@ -68,7 +68,8 @@ private:
 }  // namespace
 
 std::optional<Thumbnail> captureThumbnail(const CaptureSource& source, std::uint32_t maxWidth,
-                                          std::uint32_t maxHeight, std::chrono::milliseconds timeout) {
+                                          std::uint32_t maxHeight, const std::optional<CaptureRegion>& region,
+                                          std::chrono::milliseconds timeout) {
     if (maxWidth == 0 || maxHeight == 0) return std::nullopt;
     if (source.kind == SourceKind::Window && IsIconic(reinterpret_cast<HWND>(source.handle))) return std::nullopt;
 
@@ -112,6 +113,20 @@ std::optional<Thumbnail> captureThumbnail(const CaptureSource& source, std::uint
         capture.stop();
 
         if (pixels.empty()) return std::nullopt;
+        if (region) {
+            const auto x0 = static_cast<std::uint32_t>(std::clamp(region->x, 0, static_cast<std::int32_t>(width)));
+            const auto y0 = static_cast<std::uint32_t>(std::clamp(region->y, 0, static_cast<std::int32_t>(height)));
+            const auto x1 = static_cast<std::uint32_t>(
+                std::clamp(region->x + region->width, static_cast<std::int32_t>(x0), static_cast<std::int32_t>(width)));
+            const auto y1 = static_cast<std::uint32_t>(
+                std::clamp(region->y + region->height, static_cast<std::int32_t>(y0), static_cast<std::int32_t>(height)));
+            if (x1 <= x0 || y1 <= y0) return std::nullopt;
+            std::vector<std::uint8_t> cropped(static_cast<std::size_t>(x1 - x0) * (y1 - y0) * 4);
+            for (std::uint32_t y = y0; y < y1; ++y)
+                std::copy_n(pixels.data() + (static_cast<std::size_t>(y) * width + x0) * 4, (x1 - x0) * 4,
+                            cropped.data() + static_cast<std::size_t>(y - y0) * (x1 - x0) * 4);
+            return downscale(cropped, x1 - x0, y1 - y0, maxWidth, maxHeight);
+        }
         return downscale(pixels, width, height, maxWidth, maxHeight);
     } catch (const winrt::hresult_error& e) {
         spdlog::warn("thumbnail failed: {}", winrt::to_string(e.message()));

@@ -6,16 +6,20 @@ import QtQuick.Layouts
 Item {
     id: picker
 
+    // The user wants to drag a new region (Main hides itself and opens the overlay).
+    signal regionRequested()
+
     component Segment: AbstractButton {
         id: seg
         property bool current
         property int count
+        property bool showCount: true
         hoverEnabled: true
         implicitHeight: 32
         implicitWidth: label.implicitWidth + 28
         contentItem: Text {
             id: label
-            text: seg.text + "  " + seg.count
+            text: seg.showCount ? seg.text + "  " + seg.count : seg.text
             color: seg.current ? Theme.background : seg.hovered ? Theme.text : Theme.textDim
             font.family: Theme.fontFamily
             font.pixelSize: 13
@@ -51,14 +55,29 @@ Item {
                     Segment {
                         text: qsTr("디스플레이")
                         count: sources.monitorCount
-                        current: !sources.showWindows
-                        onClicked: sources.showWindows = false
+                        current: !sources.regionMode && !sources.showWindows
+                        onClicked: {
+                            sources.regionMode = false
+                            sources.showWindows = false
+                        }
                     }
                     Segment {
                         text: qsTr("창")
                         count: sources.windowCount
-                        current: sources.showWindows
-                        onClicked: sources.showWindows = true
+                        current: !sources.regionMode && sources.showWindows
+                        onClicked: {
+                            sources.regionMode = false
+                            sources.showWindows = true
+                        }
+                    }
+                    Segment {
+                        text: qsTr("영역")
+                        showCount: false
+                        current: sources.regionMode
+                        onClicked: {
+                            if (sources.hasRegion) sources.regionMode = true
+                            else picker.regionRequested()
+                        }
                     }
                 }
             }
@@ -70,8 +89,68 @@ Item {
             }
         }
 
+        // Region tab: the chosen rectangle and a button to choose again.
+        Item {
+            Layout.fillWidth: true
+            Layout.fillHeight: true
+            visible: sources.regionMode
+
+            Column {
+                anchors.centerIn: parent
+                spacing: 14
+
+                Rectangle {
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    width: 520
+                    height: 300
+                    radius: Theme.radius + 2
+                    color: "#0B0C10"
+                    border.color: Theme.accent
+                    border.width: 2
+                    Image {
+                        id: regionImage
+                        anchors.fill: parent
+                        anchors.margins: 4
+                        source: sources.regionThumbnail
+                        sourceSize: Qt.size(512, 292)
+                        fillMode: Image.PreserveAspectFit
+                        cache: false
+                    }
+                    Text {
+                        anchors.centerIn: parent
+                        visible: regionImage.status !== Image.Ready
+                        text: regionImage.status === Image.Loading ? qsTr("불러오는 중…") : qsTr("미리보기 없음")
+                        color: Theme.textFaint
+                        font.family: Theme.fontFamily
+                        font.pixelSize: 12
+                    }
+                }
+                Text {
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    text: sources.regionTitle
+                    color: Theme.text
+                    font.family: Theme.fontFamily
+                    font.pixelSize: 14
+                    font.weight: Font.DemiBold
+                }
+                Row {
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    spacing: 8
+                    Button {
+                        text: qsTr("영역 다시 선택…")
+                        onClicked: picker.regionRequested()
+                    }
+                    Button {
+                        text: qsTr("녹화")
+                        onClicked: recorder.start()
+                    }
+                }
+            }
+        }
+
         GridView {
             id: grid
+            visible: !sources.regionMode
             Layout.fillWidth: true
             Layout.fillHeight: true
             clip: true

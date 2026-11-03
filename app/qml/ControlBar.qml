@@ -12,6 +12,9 @@ Rectangle {
     radius: Theme.radius + 4
 
     readonly property bool active: recorder.active
+    readonly property bool replay: recorder.replayMode
+    // Per-app audio applies to window recordings only.
+    readonly property bool appAudio: appSettings.appAudioOnly && sources.showWindows && !sources.regionMode
 
     Item {
         anchors.fill: parent
@@ -27,7 +30,9 @@ Rectangle {
             spacing: 2
             Text {
                 Layout.fillWidth: true
-                text: bar.active ? recorder.recordingTitle : (sources.selectedTitle || qsTr("선택된 화면 없음"))
+                text: bar.active ? recorder.recordingTitle
+                                 : sources.regionMode ? sources.regionTitle
+                                 : (sources.selectedTitle || qsTr("선택된 화면 없음"))
                 elide: Text.ElideRight
                 color: Theme.text
                 font.family: Theme.fontFamily
@@ -36,11 +41,15 @@ Rectangle {
             }
             Text {
                 Layout.fillWidth: true
-                text: bar.active ? recorder.outputInfo
-                                 : appSettings.fps + "fps · " + (appSettings.bitrateKbps / 1000) + " Mbps · "
-                                   + (appSettings.container === "mp4" ? "MP4" : qsTr("fMP4 (안전 저장)")) + " · "
-                                   + (appSettings.captureSystemAudio && appSettings.captureMicrophone ? qsTr("시스템 소리 + 마이크")
-                                      : appSettings.captureSystemAudio ? qsTr("시스템 소리")
+                text: bar.replay ? recorder.outputInfo + qsTr(" · 최근 %1초 보관").arg(appSettings.replaySeconds)
+                    : bar.active ? recorder.outputInfo
+                                 : (appSettings.codec === "hevc" ? "HEVC" : appSettings.codec === "av1" ? "AV1" : "H.264")
+                                   + " · " + appSettings.fps + "fps · " + (appSettings.bitrateKbps / 1000) + " Mbps · "
+                                   + (appSettings.container === "mp4" || appSettings.codec !== "h264"
+                                      ? "MP4" : qsTr("fMP4 (안전 저장)")) + " · "
+                                   + (appSettings.captureSystemAudio && appSettings.captureMicrophone
+                                      ? (appAudio ? qsTr("앱 소리 + 마이크") : qsTr("시스템 소리 + 마이크"))
+                                      : appSettings.captureSystemAudio ? (appAudio ? qsTr("앱 소리") : qsTr("시스템 소리"))
                                       : appSettings.captureMicrophone ? qsTr("마이크") : qsTr("오디오 없음"))
                 elide: Text.ElideRight
                 color: Theme.textDim
@@ -60,15 +69,18 @@ Rectangle {
             id: controls
             anchors.centerIn: parent
             spacing: 12
+            // Pause, or "save replay" while the replay buffer runs.
             IconButton {
                 Layout.preferredWidth: 40
                 Layout.preferredHeight: 40
-                glyph: recorder.paused ? Theme.iconPlay : Theme.iconPause
+                glyph: bar.replay ? Theme.iconSave : recorder.paused ? Theme.iconPlay : Theme.iconPause
+                iconColor: bar.replay ? Theme.accent : Theme.text
                 iconSize: 18
-                tip: (recorder.paused ? qsTr("다시 시작") : qsTr("일시정지")) + "  (" + appSettings.hotkeyPause + ")"
+                tip: bar.replay ? qsTr("리플레이 저장") + "  (" + appSettings.hotkeyReplay + ")"
+                                : (recorder.paused ? qsTr("다시 시작") : qsTr("일시정지")) + "  (" + appSettings.hotkeyPause + ")"
                 enabled: bar.active
                 opacity: bar.active ? 1 : 0.35
-                onClicked: recorder.togglePause()
+                onClicked: bar.replay ? recorder.saveReplay() : recorder.togglePause()
             }
             RecordButton {
                 recording: bar.active
@@ -76,9 +88,23 @@ Rectangle {
                 onClicked: recorder.toggle()
                 ToolTip.visible: hovered
                 ToolTip.delay: 500
-                ToolTip.text: (bar.active ? qsTr("정지") : qsTr("녹화")) + "  (" + appSettings.hotkeyStartStop + ")"
+                ToolTip.text: (bar.replay ? qsTr("리플레이 버퍼 끄기") : bar.active ? qsTr("정지") : qsTr("녹화"))
+                              + "  (" + appSettings.hotkeyStartStop + ")"
             }
-            Item { Layout.preferredWidth: 40 }
+            // Replay buffer on/off: keeps the last N seconds in memory until saved.
+            IconButton {
+                Layout.preferredWidth: 40
+                Layout.preferredHeight: 40
+                glyph: Theme.iconReplay
+                iconSize: 18
+                iconColor: bar.replay ? Theme.accent : Theme.text
+                tip: bar.replay ? qsTr("리플레이 버퍼 끄기")
+                                : qsTr("리플레이 버퍼 켜기 — 최근 %1초를 메모리에 두었다가 %2로 저장")
+                                      .arg(appSettings.replaySeconds).arg(appSettings.hotkeyReplay)
+                enabled: !recorder.busy && captureSupported && (bar.replay || !bar.active)
+                opacity: enabled ? 1 : 0.35
+                onClicked: bar.replay ? recorder.stop() : recorder.startReplay()
+            }
         }
 
         // Right: time and state.
@@ -89,7 +115,7 @@ Rectangle {
             spacing: 2
             Text {
                 Layout.alignment: Qt.AlignRight
-                text: Theme.formatTime(recorder.elapsedMs)
+                text: bar.replay ? Theme.formatTime(recorder.replayBufferedSeconds * 1000) : Theme.formatTime(recorder.elapsedMs)
                 color: recorder.state === "recording" ? Theme.text : Theme.textDim
                 font.family: Theme.monoFont
                 font.pixelSize: 22
@@ -100,7 +126,8 @@ Rectangle {
                 Rectangle {
                     anchors.verticalCenter: parent.verticalCenter
                     width: 8; height: 8; radius: 4
-                    color: recorder.state === "recording" ? Theme.record
+                    color: bar.replay ? Theme.accent
+                         : recorder.state === "recording" ? Theme.record
                          : recorder.state === "paused" ? Theme.accent
                          : recorder.state === "error" ? Theme.danger : Theme.textFaint
                     property real blink: 1
@@ -113,7 +140,7 @@ Rectangle {
                     }
                 }
                 Text {
-                    text: ({
+                    text: bar.replay && recorder.state === "recording" ? qsTr("리플레이 버퍼") : ({
                         idle: qsTr("대기"), starting: qsTr("시작하는 중…"), recording: qsTr("녹화 중"),
                         paused: qsTr("일시정지됨"), stopping: qsTr("저장하는 중…"), error: qsTr("오류")
                     })[recorder.state] + (bar.active && recorder.framesDropped > 0

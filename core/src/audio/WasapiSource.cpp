@@ -7,6 +7,7 @@
 #include <Audioclient.h>
 #include <propsys.h>  // DEFINE_PROPERTYKEY for the header below
 #include <functiondiscoverykeys_devpkey.h>
+#include <audioclientactivationparams.h>
 #include <mmdeviceapi.h>
 
 #include <winrt/base.h>
@@ -105,6 +106,9 @@ std::vector<AudioDevice> enumerateAudioDevices(AudioDeviceKind kind) {
 WasapiSource::WasapiSource(AudioDeviceKind kind, std::wstring deviceId)
     : kind_(kind), requestedId_(std::move(deviceId)), stopEvent_(CreateEventW(nullptr, TRUE, FALSE, nullptr)) {}
 
+WasapiSource::WasapiSource(std::uint32_t processId)
+    : kind_(AudioDeviceKind::Output), processId_(processId), stopEvent_(CreateEventW(nullptr, TRUE, FALSE, nullptr)) {}
+
 WasapiSource::~WasapiSource() {
     stop();
     CloseHandle(stopEvent_);
@@ -135,11 +139,11 @@ void WasapiSource::run() {
     SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_ABOVE_NORMAL);
     ComScope com;
 
-    const char* const what = kind_ == AudioDeviceKind::Output ? "system audio" : "microphone";
+    const char* const what = processId_ ? "app audio" : kind_ == AudioDeviceKind::Output ? "system audio" : "microphone";
     for (;;) {
         DWORD retryMs = kRetryMs;
         try {
-            captureFrom(requestedId_.empty() ? defaultAudioDeviceId(kind_) : requestedId_);
+            captureFrom(processId_ || !requestedId_.empty() ? requestedId_ : defaultAudioDeviceId(kind_));
         } catch (const ReopenDevice&) {
             retryMs = 0;
         } catch (const winrt::hresult_error& e) {
@@ -160,13 +164,73 @@ void WasapiSource::run() {
     }
 }
 
-void WasapiSource::captureFrom(const std::wstring& id) {
-    if (id.empty()) winrt::throw_hresult(E_NOTFOUND);  // no device of this kind right now
+namespace {
 
-    winrt::com_ptr<IMMDevice> device;
-    winrt::check_hresult(deviceEnumerator()->GetDevice(id.c_str(), device.put()));
+// Completion handler for ActivateAudioInterfaceAsync (agile, as the API requires).
+struct ActivationHandler : winrt::implements<ActivationHandler, IActivateAudioInterfaceCompletionHandler> {
+    HANDLE done = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    HRESULT result = E_PENDING;
     winrt::com_ptr<IAudioClient> client;
-    winrt::check_hresult(device->Activate(__uuidof(IAudioClient), CLSCTX_ALL, nullptr, client.put_void()));
+
+    ~ActivationHandler() { CloseHandle(done); }
+
+    STDMETHOD(ActivateCompleted)(IActivateAudioInterfaceAsyncOperation* operation) override {
+        HRESULT activateResult = E_FAIL;
+        winrt::com_ptr<IUnknown> unknown;
+        result = operation->GetActivateResult(&activateResult, unknown.put());
+        if (SUCCEEDED(result)) result = activateResult;
+        if (SUCCEEDED(result)) result = unknown->QueryInterface(IID_PPV_ARGS(client.put()));
+        SetEvent(done);
+        return S_OK;
+    }
+};
+
+// Audio client that captures only `processId` and its child processes.
+winrt::com_ptr<IAudioClient> activateProcessLoopback(std::uint32_t processId) {
+    AUDIOCLIENT_ACTIVATION_PARAMS params{};
+    params.ActivationType = AUDIOCLIENT_ACTIVATION_TYPE_PROCESS_LOOPBACK;
+    params.ProcessLoopbackParams.TargetProcessId = processId;
+    params.ProcessLoopbackParams.ProcessLoopbackMode = PROCESS_LOOPBACK_MODE_INCLUDE_TARGET_PROCESS_TREE;
+    PROPVARIANT activation{};
+    activation.vt = VT_BLOB;
+    activation.blob.cbSize = sizeof(params);
+    activation.blob.pBlobData = reinterpret_cast<BYTE*>(&params);
+
+    const auto handler = winrt::make_self<ActivationHandler>();
+    winrt::com_ptr<IActivateAudioInterfaceAsyncOperation> operation;
+    winrt::check_hresult(ActivateAudioInterfaceAsync(VIRTUAL_AUDIO_DEVICE_PROCESS_LOOPBACK, __uuidof(IAudioClient),
+                                                     &activation, handler.get(), operation.put()));
+    if (WaitForSingleObject(handler->done, 5'000) != WAIT_OBJECT_0) winrt::throw_hresult(HRESULT_FROM_WIN32(ERROR_TIMEOUT));
+    winrt::check_hresult(handler->result);
+    return handler->client;
+}
+
+std::int64_t qpcNowHns() {
+    static const std::int64_t frequency = [] {
+        LARGE_INTEGER f;
+        QueryPerformanceFrequency(&f);
+        return f.QuadPart;
+    }();
+    LARGE_INTEGER t;
+    QueryPerformanceCounter(&t);
+    return t.QuadPart / frequency * 10'000'000 + t.QuadPart % frequency * 10'000'000 / frequency;
+}
+
+}  // namespace
+
+void WasapiSource::captureFrom(const std::wstring& id) {
+    winrt::com_ptr<IAudioClient> client;
+    std::wstring name;
+    if (processId_) {
+        client = activateProcessLoopback(processId_);
+        name = std::format(L"app audio (process {})", processId_);
+    } else {
+        if (id.empty()) winrt::throw_hresult(E_NOTFOUND);  // no device of this kind right now
+        winrt::com_ptr<IMMDevice> device;
+        winrt::check_hresult(deviceEnumerator()->GetDevice(id.c_str(), device.put()));
+        winrt::check_hresult(device->Activate(__uuidof(IAudioClient), CLSCTX_ALL, nullptr, client.put_void()));
+        name = friendlyName(device.get());
+    }
 
     // Ask for 48 kHz stereo float whatever the device mix format is; the shared-mode
     // engine resamples and remixes (AUTOCONVERTPCM).
@@ -184,19 +248,29 @@ void WasapiSource::captureFrom(const std::wstring& id) {
 
     DWORD flags = AUDCLNT_STREAMFLAGS_AUTOCONVERTPCM | AUDCLNT_STREAMFLAGS_SRC_DEFAULT_QUALITY;
     if (kind_ == AudioDeviceKind::Output) flags |= AUDCLNT_STREAMFLAGS_LOOPBACK;
+    // The process-loopback client only works event-driven; the event is also polled.
+    const HANDLE audioEvent = processId_ ? CreateEventW(nullptr, FALSE, FALSE, nullptr) : nullptr;
+    struct CloseEvent {
+        HANDLE h;
+        ~CloseEvent() {
+            if (h) CloseHandle(h);
+        }
+    } eventGuard{audioEvent};
+    if (audioEvent) flags |= AUDCLNT_STREAMFLAGS_EVENTCALLBACK;
     winrt::check_hresult(client->Initialize(AUDCLNT_SHAREMODE_SHARED, flags, kBufferDuration, 0,
                                             reinterpret_cast<WAVEFORMATEX*>(&format), nullptr));
+    if (audioEvent) winrt::check_hresult(client->SetEventHandle(audioEvent));
     winrt::com_ptr<IAudioCaptureClient> capture;
     winrt::check_hresult(client->GetService(__uuidof(IAudioCaptureClient), capture.put_void()));
     winrt::check_hresult(client->Start());
 
-    const std::wstring name = friendlyName(device.get());
     {
         std::lock_guard lock(nameMutex_);
         deviceName_ = name;
     }
     warned_ = false;
-    spdlog::info("{} capture opened: {}", kind_ == AudioDeviceKind::Output ? "loopback" : "microphone", narrow(name));
+    spdlog::info("{} capture opened: {}",
+                 processId_ ? "app loopback" : kind_ == AudioDeviceKind::Output ? "loopback" : "microphone", narrow(name));
 
     struct StopClient {
         IAudioClient* client;
@@ -215,15 +289,17 @@ void WasapiSource::captureFrom(const std::wstring& id) {
             winrt::check_hresult(capture->GetBuffer(&data, &frames, &bufferFlags, nullptr, &qpcPosition));
             if (frames > 0 && onPacket_) {
                 const bool silent = bufferFlags & AUDCLNT_BUFFERFLAGS_SILENT;
-                onPacket_(silent ? nullptr : reinterpret_cast<const float*>(data), frames,
-                          static_cast<std::int64_t>(qpcPosition));
+                // Process loopback may not stamp packets; then the packet ended about now.
+                const auto timestamp = qpcPosition ? static_cast<std::int64_t>(qpcPosition)
+                                                   : qpcNowHns() - static_cast<std::int64_t>(frames) * 10'000'000 / kSampleRate;
+                onPacket_(silent ? nullptr : reinterpret_cast<const float*>(data), frames, timestamp);
             }
             winrt::check_hresult(capture->ReleaseBuffer(frames));
             winrt::check_hresult(capture->GetNextPacketSize(&packet));
         }
 
         // Following the default device: switch when the user changes it in Windows.
-        if (requestedId_.empty() && ++polls >= kDefaultCheckPolls) {
+        if (!processId_ && requestedId_.empty() && ++polls >= kDefaultCheckPolls) {
             polls = 0;
             if (defaultAudioDeviceId(kind_) != id) {
                 spdlog::info("default {} device changed; reopening", kind_ == AudioDeviceKind::Output ? "output" : "input");

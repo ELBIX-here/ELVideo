@@ -1,5 +1,7 @@
 #include "output/MediaWriter.h"
 
+#include "core/IRecorder.h"
+
 #include <mfapi.h>
 #include <mferror.h>
 #include <mftransform.h>
@@ -13,6 +15,7 @@
 #include <algorithm>
 #include <cstring>
 #include <stdexcept>
+#include <vector>
 
 namespace elv {
 
@@ -39,12 +42,21 @@ winrt::com_ptr<IMFMediaType> createVideoType(const GUID& subtype, const MediaWri
     return type;
 }
 
+GUID subtypeOf(VideoCodec codec) {
+    switch (codec) {
+    case VideoCodec::HEVC: return MFVideoFormat_HEVC;
+    case VideoCodec::AV1: return MFVideoFormat_AV1;
+    case VideoCodec::H264: break;
+    }
+    return MFVideoFormat_H264;
+}
+
 // Hardware MFTs usually lack a friendly name on the instance; look it up in the
 // registration that has the same hardware URL.
-std::wstring hardwareEncoderName(const std::wstring& hardwareUrl) {
+std::wstring hardwareEncoderName(const std::wstring& hardwareUrl, VideoCodec codec) {
     IMFActivate** activates = nullptr;
     UINT32 count = 0;
-    const MFT_REGISTER_TYPE_INFO outputInfo{MFMediaType_Video, MFVideoFormat_H264};
+    const MFT_REGISTER_TYPE_INFO outputInfo{MFMediaType_Video, subtypeOf(codec)};
     if (FAILED(MFTEnumEx(MFT_CATEGORY_VIDEO_ENCODER, MFT_ENUM_FLAG_HARDWARE, nullptr, &outputInfo, &activates,
                          &count)))
         return {};
@@ -143,11 +155,23 @@ void MediaWriter::createWriter(bool hardware) {
                                                  : MFTranscodeContainerType_MPEG4));
 
     writer_ = nullptr;
-    winrt::check_hresult(MFCreateSinkWriterFromURL(config_.path.c_str(), nullptr, attributes.get(), writer_.put()));
+    if (config_.byteStream) {
+        // A second attempt (hardware -> software) starts the stream over.
+        winrt::check_hresult(config_.byteStream->SetLength(0));
+        winrt::check_hresult(config_.byteStream->SetCurrentPosition(0));
+        winrt::check_hresult(MFCreateSinkWriterFromURL(nullptr, config_.byteStream, attributes.get(), writer_.put()));
+    } else {
+        winrt::check_hresult(MFCreateSinkWriterFromURL(config_.path.c_str(), nullptr, attributes.get(), writer_.put()));
+    }
 
-    const auto outputType = createVideoType(MFVideoFormat_H264, config_);
+    const auto outputType = createVideoType(subtypeOf(config_.codec), config_);
     winrt::check_hresult(outputType->SetUINT32(MF_MT_AVG_BITRATE, config_.bitrateKbps * 1000));
-    winrt::check_hresult(outputType->SetUINT32(MF_MT_MPEG2_PROFILE, eAVEncH264VProfile_High));
+    const UINT32 profile = config_.codec == VideoCodec::HEVC  ? static_cast<UINT32>(eAVEncH265VProfile_Main_420_8)
+                           : config_.codec == VideoCodec::AV1 ? static_cast<UINT32>(eAVEncAV1VProfile_Main_420_8)
+                                                              : static_cast<UINT32>(eAVEncH264VProfile_High);
+    // HEVC encoders default to Main; some hardware HEVC encoders (NVIDIA, DX12) reject
+    // the output type when the profile is set explicitly.
+    if (config_.codec != VideoCodec::HEVC) winrt::check_hresult(outputType->SetUINT32(MF_MT_MPEG2_PROFILE, profile));
     winrt::check_hresult(writer_->AddStream(outputType.get(), &videoStream_));
 
     const auto inputType = createVideoType(MFVideoFormat_NV12, config_);
@@ -175,8 +199,9 @@ void MediaWriter::queryEncoder() {
     winrt::com_ptr<IMFTransform> transform;
     if (FAILED(writer_->GetServiceForStream(videoStream_, GUID_NULL, IID_PPV_ARGS(transform.put())))) return;
     winrt::com_ptr<IMFAttributes> attributes;
+    const std::wstring generic = winrt::to_hstring(codecName(config_.codec)).c_str();
     if (FAILED(transform->GetAttributes(attributes.put())) || !attributes) {
-        encoderName_ = L"Microsoft H.264 encoder";
+        encoderName_ = L"Microsoft " + generic + L" encoder";
         return;
     }
 
@@ -186,9 +211,9 @@ void MediaWriter::queryEncoder() {
     if (SUCCEEDED(attributes->GetString(MFT_FRIENDLY_NAME_Attribute, name, ARRAYSIZE(name), nullptr)))
         encoderName_ = name;
     else if (hardware_)
-        encoderName_ = hardwareEncoderName(url);
+        encoderName_ = hardwareEncoderName(url, config_.codec);
     if (encoderName_.empty() || encoderName_ == L"unknown")
-        encoderName_ = hardware_ ? L"hardware H.264 encoder" : L"Microsoft H.264 encoder";
+        encoderName_ = (hardware_ ? L"hardware " : L"Microsoft ") + generic + L" encoder";
 }
 
 bool MediaWriter::writeVideo(ID3D11Texture2D* nv12, std::int64_t timeHns, std::int64_t durationHns) {
@@ -327,6 +352,41 @@ void MediaWriter::finalize() {
     releaseWriter();
     winrt::check_hresult(hr);
     spdlog::info("output finalized: {}", winrt::to_string(config_.path.wstring()));
+}
+
+const char* codecName(VideoCodec codec) {
+    switch (codec) {
+    case VideoCodec::HEVC: return "HEVC";
+    case VideoCodec::AV1: return "AV1";
+    case VideoCodec::H264: break;
+    }
+    return "H.264";
+}
+
+std::vector<VideoEncoderInfo> enumerateVideoEncoders() {
+    std::vector<VideoEncoderInfo> encoders;
+    if (FAILED(MFStartup(MF_VERSION, MFSTARTUP_LITE))) return encoders;
+    for (const auto codec : {VideoCodec::H264, VideoCodec::HEVC, VideoCodec::AV1}) {
+        const MFT_REGISTER_TYPE_INFO output{MFMediaType_Video, subtypeOf(codec)};
+        IMFActivate** activates = nullptr;
+        UINT32 count = 0;
+        const UINT32 flags = MFT_ENUM_FLAG_HARDWARE | MFT_ENUM_FLAG_SYNCMFT | MFT_ENUM_FLAG_ASYNCMFT |
+                             MFT_ENUM_FLAG_LOCALMFT | MFT_ENUM_FLAG_SORTANDFILTER;
+        if (FAILED(MFTEnumEx(MFT_CATEGORY_VIDEO_ENCODER, flags, nullptr, &output, &activates, &count))) continue;
+        for (UINT32 i = 0; i < count; ++i) {
+            VideoEncoderInfo info;
+            info.codec = codec;
+            wchar_t name[256]{};
+            if (SUCCEEDED(activates[i]->GetString(MFT_FRIENDLY_NAME_Attribute, name, ARRAYSIZE(name), nullptr)))
+                info.name = name;
+            info.hardware = MFGetAttributeUINT32(activates[i], MF_TRANSFORM_FLAGS_Attribute, 0) & MFT_ENUM_FLAG_HARDWARE;
+            encoders.push_back(std::move(info));
+            activates[i]->Release();
+        }
+        CoTaskMemFree(activates);
+    }
+    MFShutdown();
+    return encoders;
 }
 
 }  // namespace elv

@@ -90,6 +90,21 @@ ApplicationWindow {
         visible: recorder.active && appSettings.showFloatingBar
     }
 
+    // Region recording: choose with the overlay, outline it while recording.
+    property rect recordingRegion: Qt.rect(0, 0, 0, 0)
+    RegionSelector {
+        id: regionSelector
+        onFinished: accepted => root.showMain()
+    }
+    RegionFrame {
+        region: root.recordingRegion
+        visible: recorder.active && root.recordingRegion.width > 0
+    }
+    function selectRegion() {
+        root.hide()
+        regionSelector.open()
+    }
+
     Connections {
         target: recorder
         function onStateChanged() {
@@ -97,6 +112,8 @@ ApplicationWindow {
             root.wasActive = recorder.active
             if (recorder.active) {
                 root.showSettings = false
+                root.recordingRegion = sources.regionMode && sources.hasRegion ? sources.regionGeometry
+                                                                              : Qt.rect(0, 0, 0, 0)
                 if (appSettings.hideWindowWhileRecording && root.visible) {
                     root.hiddenForRecording = true
                     root.hide()
@@ -112,6 +129,10 @@ ApplicationWindow {
             toast.showSaved(text.arg(Theme.formatTime(durationMs)), path)
             if (!root.visible && !root.hiddenForRecording)
                 tray.notify(qsTr("녹화 저장됨"), desktop.fileName(path))
+        }
+        function onReplaySaved(path, lengthMs) {
+            toast.showSaved(qsTr("리플레이 %1초를 저장했습니다.").arg(Math.round(lengthMs / 1000)), path)
+            if (!root.visible) tray.notify(qsTr("리플레이 저장됨"), desktop.fileName(path))
         }
         function onWarningOccurred(message) {
             toast.showWarning(qsTr("녹화는 계속됩니다: %1").arg(message))
@@ -155,7 +176,7 @@ ApplicationWindow {
             }
             Text {
                 Layout.leftMargin: 6
-                text: root.showSettings ? qsTr("설정") : qsTr("녹화할 화면을 고르세요")
+                text: recorder.replayMode ? qsTr("리플레이 버퍼") : recorder.active ? qsTr("녹화 중") : root.showSettings ? qsTr("설정") : qsTr("녹화할 화면을 고르세요")
                 color: Theme.textDim
                 font.family: Theme.fontFamily
                 font.pixelSize: 13
@@ -178,9 +199,12 @@ ApplicationWindow {
         StackLayout {
             Layout.fillWidth: true
             Layout.fillHeight: true
-            currentIndex: root.showSettings ? 1 : 0
-            SourcePicker {}
+            currentIndex: recorder.active ? 2 : root.showSettings ? 1 : 0
+            SourcePicker {
+                onRegionRequested: root.selectRegion()
+            }
             SettingsPage {}
+            PreviewPanel {}
         }
 
         Toast {

@@ -32,7 +32,10 @@ T value(const nlohmann::json& j, const char* key, T fallback) {
 }  // namespace
 
 AppSettings::AppSettings(QObject* parent)
-    : QObject(parent), hotkeyStartStop(QString::fromLatin1(kDefaultStartStop)), hotkeyPause(QString::fromLatin1(kDefaultPause)) {
+    : QObject(parent),
+      hotkeyStartStop(QString::fromLatin1(kDefaultStartStop)),
+      hotkeyPause(QString::fromLatin1(kDefaultPause)),
+      hotkeyReplay(QString::fromLatin1(kDefaultReplay)) {
     saveTimer_.setSingleShot(true);
     saveTimer_.setInterval(500);
     connect(&saveTimer_, &QTimer::timeout, this, &AppSettings::save);
@@ -71,17 +74,27 @@ void AppSettings::load() {
     if (container != QLatin1String("mp4")) container = QStringLiteral("fmp4");
     fps = std::clamp(value(j, "fps", fps), 1, 240);
     bitrateKbps = std::clamp(value(j, "bitrateKbps", bitrateKbps), 500, 200'000);
+    codec = str(j, "codec", codec);
+    if (codec != QLatin1String("hevc") && codec != QLatin1String("av1")) codec = QStringLiteral("h264");
     preferHardware = value(j, "preferHardware", preferHardware);
     captureCursor = value(j, "captureCursor", captureCursor);
     captureSystemAudio = value(j, "captureSystemAudio", captureSystemAudio);
     systemAudioDevice = str(j, "systemAudioDevice", systemAudioDevice);
     systemAudioVolume = std::clamp(value(j, "systemAudioVolume", systemAudioVolume), 0, 200);
+    appAudioOnly = value(j, "appAudioOnly", appAudioOnly);
     captureMicrophone = value(j, "captureMicrophone", captureMicrophone);
     microphoneDevice = str(j, "microphoneDevice", microphoneDevice);
     microphoneVolume = std::clamp(value(j, "microphoneVolume", microphoneVolume), 0, 200);
     audioBitrateKbps = std::clamp(value(j, "audioBitrateKbps", audioBitrateKbps), 96, 192);
+    webcamEnabled = value(j, "webcamEnabled", webcamEnabled);
+    webcamDevice = str(j, "webcamDevice", webcamDevice);
+    webcamCorner = std::clamp(value(j, "webcamCorner", webcamCorner), 0, 3);
+    webcamSize = std::clamp(value(j, "webcamSize", webcamSize), 10, 50);
+    webcamMirror = value(j, "webcamMirror", webcamMirror);
     hotkeyStartStop = str(j, "hotkeyStartStop", hotkeyStartStop);
     hotkeyPause = str(j, "hotkeyPause", hotkeyPause);
+    hotkeyReplay = str(j, "hotkeyReplay", hotkeyReplay);
+    replaySeconds = std::clamp(value(j, "replaySeconds", replaySeconds), 5, 600);
     hideWindowWhileRecording = value(j, "hideWindowWhileRecording", hideWindowWhileRecording);
     showFloatingBar = value(j, "showFloatingBar", showFloatingBar);
     closeToTray = value(j, "closeToTray", closeToTray);
@@ -97,17 +110,26 @@ void AppSettings::save() {
         {"container", container.toStdString()},
         {"fps", fps},
         {"bitrateKbps", bitrateKbps},
+        {"codec", codec.toStdString()},
         {"preferHardware", preferHardware},
         {"captureCursor", captureCursor},
         {"captureSystemAudio", captureSystemAudio},
         {"systemAudioDevice", systemAudioDevice.toStdString()},
         {"systemAudioVolume", systemAudioVolume},
+        {"appAudioOnly", appAudioOnly},
         {"captureMicrophone", captureMicrophone},
         {"microphoneDevice", microphoneDevice.toStdString()},
         {"microphoneVolume", microphoneVolume},
         {"audioBitrateKbps", audioBitrateKbps},
+        {"webcamEnabled", webcamEnabled},
+        {"webcamDevice", webcamDevice.toStdString()},
+        {"webcamCorner", webcamCorner},
+        {"webcamSize", webcamSize},
+        {"webcamMirror", webcamMirror},
         {"hotkeyStartStop", hotkeyStartStop.toStdString()},
         {"hotkeyPause", hotkeyPause.toStdString()},
+        {"hotkeyReplay", hotkeyReplay.toStdString()},
+        {"replaySeconds", replaySeconds},
         {"hideWindowWhileRecording", hideWindowWhileRecording},
         {"showFloatingBar", showFloatingBar},
         {"closeToTray", closeToTray},
@@ -127,5 +149,6 @@ void AppSettings::save() {
 void AppSettings::resetHotkeys() {
     hotkeyStartStop = QString::fromLatin1(kDefaultStartStop);
     hotkeyPause = QString::fromLatin1(kDefaultPause);
+    hotkeyReplay = QString::fromLatin1(kDefaultReplay);
     emit changed();
 }

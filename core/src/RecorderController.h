@@ -26,7 +26,9 @@ public:
     bool pause() override;
     bool resume() override;
     bool stop() override;
+    bool saveReplay(const std::filesystem::path& path) override;
     RecorderState state() const override { return state_; }
+    std::optional<Thumbnail> preview(std::uint32_t maxWidth, std::uint32_t maxHeight) override;
     void setListener(IRecorderListener* listener) override;
 
 private:
@@ -57,7 +59,8 @@ private:
     bool quit_ = false;
     std::thread worker_;
 
-    // Engine thread only.
+    // Written by the engine thread only; sessionMutex_ guards the pointer for preview().
+    std::mutex sessionMutex_;
     std::unique_ptr<RecordingSession> session_;
     RecordingInfo info_;
 };

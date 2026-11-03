@@ -31,6 +31,7 @@ private:
     QMenu menu_;
     QAction* toggleAction_ = nullptr;
     QAction* pauseAction_ = nullptr;
+    QAction* replayAction_ = nullptr;
     QIcon idleIcon_;
     QIcon recordingIcon_;
     QIcon pausedIcon_;

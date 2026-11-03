@@ -12,20 +12,22 @@ class Hotkeys : public QObject {
     // Human-readable problems with the current hotkeys (empty when all registered).
     Q_PROPERTY(QString startStopError READ startStopError NOTIFY errorsChanged)
     Q_PROPERTY(QString pauseError READ pauseError NOTIFY errorsChanged)
+    Q_PROPERTY(QString replayError READ replayError NOTIFY errorsChanged)
     // While true (a hotkey field is being edited) nothing is registered, so the
     // field receives the key combination instead of the running hotkey.
     Q_PROPERTY(bool suspended READ suspended WRITE setSuspended NOTIFY suspendedChanged)
 
 public:
-    enum Id { StartStop = 1, Pause = 2 };
+    enum Id { StartStop = 1, Pause = 2, Replay = 3 };
 
     explicit Hotkeys(QObject* parent = nullptr);
     ~Hotkeys() override;
 
-    void setSequences(const QString& startStop, const QString& pause);
+    void setSequences(const QString& startStop, const QString& pause, const QString& replay);
 
     QString startStopError() const { return errors_[StartStop]; }
     QString pauseError() const { return errors_[Pause]; }
+    QString replayError() const { return errors_[Replay]; }
     bool suspended() const { return suspended_; }
     void setSuspended(bool suspended);
 
@@ -48,8 +50,8 @@ private:
     QString registerOne(Id id, const QString& sequence);
 
     HWND hwnd_ = nullptr;
-    QString sequences_[3];
-    QString errors_[3];
-    bool registered_[3]{};
+    QString sequences_[4];
+    QString errors_[4];
+    bool registered_[4]{};
     bool suspended_ = false;
 };

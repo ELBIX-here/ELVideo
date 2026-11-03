@@ -41,9 +41,11 @@ Item {
     // Device lists, re-read whenever the page is shown (devices come and go).
     property var outputDevices: []
     property var inputDevices: []
+    property var cameras: []
     function reloadDevices() {
         outputDevices = recorder.audioDevices(false)
         inputDevices = recorder.audioDevices(true)
+        cameras = recorder.webcams()
     }
     onVisibleChanged: if (visible) reloadDevices()
     Component.onCompleted: reloadDevices()
@@ -67,7 +69,11 @@ Item {
         width: 340
         model: entries
         textRole: "name"
-        currentIndex: Math.max(0, entries.findIndex(e => e.id === deviceId))
+        // A new model resets currentIndex (and drops a binding), so set it explicitly.
+        function sync() { currentIndex = Math.max(0, entries.findIndex(e => e.id === deviceId)) }
+        onModelChanged: sync()
+        onDeviceIdChanged: sync()
+        Component.onCompleted: sync()
         onActivated: index => box.picked(entries[index].id)
     }
 
@@ -131,6 +137,9 @@ Item {
                 }
                 SettingRow {
                     label: qsTr("파일 형식")
+                    error: appSettings.codec !== "h264" && appSettings.container !== "mp4"
+                           ? qsTr("HEVC와 AV1은 일반 MP4로 저장됩니다(fMP4는 H.264 전용). 비정상 종료 시 파일이 손상될 수 있습니다.")
+                           : ""
                     description: appSettings.container === "mp4"
                                  ? qsTr("일반 MP4. 녹화 중 앱이 비정상 종료되면 파일을 재생할 수 없습니다.")
                                  : qsTr("조각난 MP4(fMP4). 비정상 종료되어도 그때까지 녹화된 부분이 남습니다.")
@@ -145,6 +154,37 @@ Item {
 
             Section {
                 title: qsTr("비디오")
+                SettingRow {
+                    label: qsTr("코덱")
+                    description: Object.keys(recorder.codecSupport).length === 0
+                                 ? qsTr("이 PC에서 쓸 수 있는 코덱을 확인하는 중…")
+                                 : qsTr("HEVC는 같은 화질에서 파일이 작지만 일부 프로그램에서 재생되지 않을 수 있습니다. 주 모니터의 GPU로 시험한 결과입니다.")
+                    ComboBox {
+                        id: codecBox
+                        width: 340
+                        readonly property var keys: ["h264", "hevc", "av1"]
+                        readonly property var support: recorder.codecSupport
+                        model: keys.map(k => support[k] ? support[k].label
+                                                        : (k === "h264" ? "H.264" : k === "hevc" ? "HEVC" : "AV1"))
+                        // The labels arrive after the probe; a new model resets currentIndex.
+                        function sync() { currentIndex = Math.max(0, keys.indexOf(appSettings.codec)) }
+                        onModelChanged: sync()
+                        Component.onCompleted: sync()
+                        Connections {
+                            target: appSettings
+                            function onChanged() { codecBox.sync() }
+                        }
+                        delegate: ItemDelegate {
+                            required property int index
+                            required property var modelData
+                            width: codecBox.width
+                            text: modelData
+                            enabled: !codecBox.support[codecBox.keys[index]] || codecBox.support[codecBox.keys[index]].supported
+                            highlighted: codecBox.highlightedIndex === index
+                        }
+                        onActivated: index => appSettings.codec = keys[index]
+                    }
+                }
                 SettingRow {
                     label: qsTr("프레임 속도")
                     ComboBox {
@@ -194,6 +234,15 @@ Item {
                     ToggleSwitch {
                         checked: appSettings.captureSystemAudio
                         onToggled: appSettings.captureSystemAudio = checked
+                    }
+                }
+                SettingRow {
+                    visible: appSettings.captureSystemAudio
+                    label: qsTr("창을 녹화할 때 그 앱 소리만")
+                    description: qsTr("녹화하는 창의 프로그램(자식 프로세스 포함) 소리만 담고 다른 앱 소리는 뺍니다. 디스플레이와 영역 녹화에는 적용되지 않습니다. Windows 11이 필요합니다.")
+                    ToggleSwitch {
+                        checked: appSettings.appAudioOnly
+                        onToggled: appSettings.appAudioOnly = checked
                     }
                 }
                 SettingRow {
@@ -253,6 +302,104 @@ Item {
             }
 
             Section {
+                title: qsTr("웹캠")
+                SettingRow {
+                    label: qsTr("웹캠 오버레이")
+                    description: page.cameras.length === 0
+                                 ? qsTr("연결된 카메라를 찾지 못했습니다.")
+                                 : qsTr("녹화 화면 모서리에 카메라 화면을 겹쳐 넣습니다. 카메라는 녹화하는 동안에만 켜집니다.")
+                    ToggleSwitch {
+                        enabled: page.cameras.length > 0 || appSettings.webcamEnabled
+                        checked: appSettings.webcamEnabled
+                        onToggled: appSettings.webcamEnabled = checked
+                    }
+                }
+                SettingRow {
+                    visible: appSettings.webcamEnabled
+                    label: qsTr("카메라")
+                    ComboBox {
+                        id: cameraBox
+                        width: 340
+                        readonly property var entries: {
+                            const list = [{ id: "", name: page.cameras.length > 0
+                                                          ? qsTr("첫 번째 카메라 (%1)").arg(page.cameras[0].name)
+                                                          : qsTr("첫 번째 카메라") }]
+                            for (const c of page.cameras) list.push(c)
+                            return list
+                        }
+                        model: entries
+                        textRole: "name"
+                        function sync() { currentIndex = Math.max(0, entries.findIndex(e => e.id === appSettings.webcamDevice)) }
+                        onModelChanged: sync()
+                        Component.onCompleted: sync()
+                        onActivated: index => appSettings.webcamDevice = entries[index].id
+                    }
+                }
+                SettingRow {
+                    visible: appSettings.webcamEnabled
+                    label: qsTr("위치")
+                    ComboBox {
+                        width: 200
+                        model: [qsTr("왼쪽 위"), qsTr("오른쪽 위"), qsTr("왼쪽 아래"), qsTr("오른쪽 아래")]
+                        currentIndex: appSettings.webcamCorner
+                        onActivated: index => appSettings.webcamCorner = index
+                    }
+                }
+                SettingRow {
+                    visible: appSettings.webcamEnabled
+                    label: qsTr("크기")
+                    description: qsTr("녹화 화면 너비 대비")
+                    Row {
+                        spacing: 8
+                        Slider {
+                            id: camSize
+                            width: 180
+                            from: 10
+                            to: 50
+                            stepSize: 1
+                            value: appSettings.webcamSize
+                            onMoved: appSettings.webcamSize = Math.round(value)
+                        }
+                        Text {
+                            anchors.verticalCenter: parent.verticalCenter
+                            width: 44
+                            text: Math.round(camSize.value) + "%"
+                            color: Theme.textDim
+                            font.family: Theme.fontFamily
+                            font.pixelSize: 12
+                        }
+                    }
+                }
+                SettingRow {
+                    visible: appSettings.webcamEnabled
+                    label: qsTr("좌우 반전 (거울 모드)")
+                    ToggleSwitch {
+                        checked: appSettings.webcamMirror
+                        onToggled: appSettings.webcamMirror = checked
+                    }
+                }
+            }
+
+            Section {
+                title: qsTr("리플레이 버퍼")
+                SettingRow {
+                    label: qsTr("보관할 길이")
+                    description: qsTr("녹화 바의 리플레이 버튼으로 켜면 최근 이만큼을 메모리에 두었다가, 저장할 때 파일로 씁니다(H.264, fMP4). 키프레임 위치 때문에 최대 2초 더 길게 저장될 수 있습니다.")
+                    SpinBox {
+                        width: 200
+                        from: 5
+                        to: 600
+                        stepSize: 5
+                        editable: true
+                        value: appSettings.replaySeconds
+                        textFromValue: (v, locale) => v + qsTr("초")
+                        valueFromText: (text, locale) => parseInt(text)
+                        onValueModified: appSettings.replaySeconds = value
+                    }
+                }
+            }
+
+            Section {
                 title: qsTr("단축키")
                 SettingRow {
                     label: qsTr("녹화 시작 / 정지")
@@ -269,6 +416,15 @@ Item {
                     HotkeyField {
                         sequence: appSettings.hotkeyPause
                         onEdited: s => appSettings.hotkeyPause = s
+                    }
+                }
+                SettingRow {
+                    label: qsTr("리플레이 저장")
+                    description: qsTr("리플레이 버퍼가 꺼져 있으면 켭니다.")
+                    error: hotkeys.replayError
+                    HotkeyField {
+                        sequence: appSettings.hotkeyReplay
+                        onEdited: s => appSettings.hotkeyReplay = s
                     }
                 }
                 RowLayout {

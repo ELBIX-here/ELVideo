@@ -19,6 +19,7 @@ struct RecorderStats {
     // source is not recorded.
     float systemPeak = -1.0f;
     float microphonePeak = -1.0f;
+    double replayBufferedSeconds = 0;  // replay buffer mode: video currently held
 };
 
 struct RecordingInfo {
@@ -30,6 +31,7 @@ struct RecordingInfo {
     bool hardwareEncoder = false;
     std::wstring adapterName;
     bool hasAudio = false;
+    bool replay = false;  // replay buffer mode: `path` is unused
 };
 
 enum class StopReason {
@@ -55,6 +57,8 @@ public:
     virtual void onFinished(const RecordingInfo&, const RecorderStats&, StopReason) {}
     // A start failed or a recording failed. UTF-8 message.
     virtual void onError(const std::string& /*message*/) {}
+    // saveReplay() wrote `path` with `length` of video.
+    virtual void onReplaySaved(const std::filesystem::path& /*path*/, std::chrono::milliseconds /*length*/) {}
     // Something degraded but the recording goes on (e.g. a microphone could not be
     // opened or was unplugged; its part of the track is silent). UTF-8 message.
     virtual void onWarning(const std::string& /*message*/) {}

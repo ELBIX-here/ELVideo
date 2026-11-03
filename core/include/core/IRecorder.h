@@ -26,8 +26,16 @@ public:
     virtual bool pause() = 0;
     virtual bool resume() = 0;
     virtual bool stop() = 0;
+    // Replay buffer mode only: writes the buffered seconds to `path` (absolute).
+    // Result: onReplaySaved, or onWarning when nothing is buffered yet.
+    virtual bool saveReplay(const std::filesystem::path& path) = 0;
 
     virtual RecorderState state() const = 0;
+
+    // The frame being recorded right now (after cropping and overlays), scaled to
+    // fit maxWidth x maxHeight. nullopt when not recording or before the first
+    // frame. Any thread; costs a GPU scale and a small readback (~1-3 ms).
+    virtual std::optional<Thumbnail> preview(std::uint32_t maxWidth, std::uint32_t maxHeight) = 0;
 
     // Set before start(); may be nullptr. The pointer must outlive the recorder
     // or be cleared first.
@@ -51,15 +59,30 @@ const char* version();
 // The calling process should be per-monitor DPI aware for sizes to be physical.
 std::vector<CaptureSource> enumerateCaptureSources();
 
+// Video encoders Media Foundation offers on this PC (hardware first per codec).
+// A codec with no entry cannot be recorded. Hardware encoders belong to a GPU;
+// the one that drives the recorded monitor is used.
+std::vector<VideoEncoderInfo> enumerateVideoEncoders();
+const char* codecName(VideoCodec codec);  // "H.264", "HEVC", "AV1"
+
+// Encodes a few frames with `codec` on the GPU that would record `source` and
+// reports which encoder was used, or why it failed. Takes up to a second.
+EncoderProbe probeVideoEncoder(VideoCodec codec, const CaptureSource& source, bool preferHardware = true);
+
+// Cameras Media Foundation can open.
+std::vector<WebcamDevice> enumerateWebcams();
+
 // Active audio endpoints, default first. Requires COM on the calling thread.
 std::vector<AudioDevice> enumerateAudioDevices(AudioDeviceKind kind);
 
-// Grabs one frame of the source (without the cursor) scaled to fit
-// maxWidth x maxHeight. Blocks until a frame arrives or `timeout` passes, so call
-// it off the UI thread; several calls may run in parallel. Returns nullopt when
-// no frame came (minimized window, protected content) or the source is gone.
+// Grabs one frame of the source (without the cursor), optionally cropped to
+// `region`, scaled to fit maxWidth x maxHeight. Blocks until a frame arrives or
+// `timeout` passes, so call it off the UI thread; several calls may run in
+// parallel. Returns nullopt when no frame came (minimized window, protected
+// content) or the source is gone.
 std::optional<Thumbnail> captureThumbnail(const CaptureSource& source, std::uint32_t maxWidth,
                                           std::uint32_t maxHeight,
+                                          const std::optional<CaptureRegion>& region = std::nullopt,
                                           std::chrono::milliseconds timeout = std::chrono::milliseconds(800));
 
 }  // namespace elv

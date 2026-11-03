@@ -20,13 +20,16 @@ struct MediaWriterConfig {
     std::uint32_t fpsNumerator = 60;
     std::uint32_t fpsDenominator = 1;
     std::uint32_t bitrateKbps = 12'000;
+    VideoCodec codec = VideoCodec::H264;
     Container container = Container::FragmentedMp4;
     bool preferHardware = true;
     bool audio = false;  // adds an AAC track fed by writeAudio()
+    // When set, the container is written to this stream instead of `path`.
+    IMFByteStream* byteStream = nullptr;
     std::uint32_t audioBitrateKbps = 192;
 };
 
-// Media Foundation SinkWriter producing H.264 in MP4 / fragmented MP4.
+// Media Foundation SinkWriter producing H.264, HEVC or AV1 in MP4 / fragmented MP4.
 // Takes NV12 textures from the shared D3D device. Hardware encoders get GPU
 // surfaces directly; the software fallback gets a CPU copy.
 class MediaWriter {

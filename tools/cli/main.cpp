@@ -7,6 +7,8 @@
 //   elvideo-cli record <source> [seconds=10] [out=recording.mp4] [--fps N] [--bitrate KBPS] [--software] [--mp4]
 //                      [--pause-at S --resume-at S]
 //                      [--audio none|system|mic|both] [--system-device ID] [--mic-device ID]
+//                      [--region X,Y,W,H] [--codec h264|hevc|av1] [--preview frame.png] [--app-audio]
+//                      [--webcam default|test|ID] [--replay SECONDS --save-at S1,S2]
 //     Records through IRecorder (fragmented MP4 unless --mp4) and prints per-second stats with CPU usage.
 //   elvideo-cli stress <source> [cycles=30] [seconds=1] [outdir=stress]
 //     Repeats start/pause/resume/stop and reports memory, handle, thread and GPU memory growth.
@@ -55,6 +57,22 @@ int runInfo() {
     std::printf("Windows build       : %s\n", info.windowsBuild.c_str());
     std::printf("WGC supported       : %s\n", info.captureSupported ? "yes" : "no");
     std::printf("Borderless capture  : %s\n", info.borderlessCaptureSupported ? "yes" : "no");
+    std::printf("Video encoders      :\n");
+    for (const auto& e : elv::enumerateVideoEncoders())
+        std::printf("  %-6s %-8s %s\n", elv::codecName(e.codec), e.hardware ? "hardware" : "software",
+                    winrt::to_string(e.name).c_str());
+    // A real short encode per codec on each monitor's GPU.
+    for (const auto& s : elv::enumerateCaptureSources()) {
+        if (s.kind != elv::SourceKind::Monitor) continue;
+        std::printf("Encode test on %s:\n", winrt::to_string(s.title).c_str());
+        for (const auto codec : {elv::VideoCodec::H264, elv::VideoCodec::HEVC, elv::VideoCodec::AV1}) {
+            const auto p = elv::probeVideoEncoder(codec, s);
+            std::printf("  %-6s %s\n", elv::codecName(codec),
+                        p.supported ? std::format("{} ({})", winrt::to_string(p.encoderName),
+                                                  p.hardware ? "hardware" : "software").c_str()
+                                    : ("unsupported: " + p.error).c_str());
+        }
+    }
     return info.captureSupported ? 0 : 1;
 }
 
@@ -227,6 +245,11 @@ int wmain(int argc, wchar_t** argv) {
         if (cmd == L"probe" && argc > 2) return runProbe(argv[2], argc > 3 ? argv[3] : L"");
         if (cmd == L"synccheck" && argc > 2) return runSyncCheck(argv[2]);
         if (cmd == L"audio") return runAudioDevices();
+        if (cmd == L"webcams") {
+            for (const auto& w : elv::enumerateWebcams())
+                std::printf("%s\n    %s\n", winrt::to_string(w.name).c_str(), winrt::to_string(w.id).c_str());
+            return 0;
+        }
         if (cmd == L"dumpinfo" && argc > 2) return runDumpInfo(argv[2]);
         if (cmd == L"thumb" && argc > 2) return runThumb(argv[2], argc > 3 ? argv[3] : L"thumbs");
     } catch (const winrt::hresult_error& e) {
@@ -243,9 +266,11 @@ int wmain(int argc, wchar_t** argv) {
                  "       elvideo-cli record <m0|w3|0xHWND> [seconds] [out.mp4] [--fps N] [--bitrate KBPS] "
                  "[--software] [--mp4] [--pause-at S --resume-at S]\n"
                  "                          [--audio none|system|mic|both] [--system-device ID] [--mic-device ID]\n"
+                 "                          [--region X,Y,W,H] [--codec h264|hevc|av1] [--preview frame.png] [--app-audio]\n"
+                 "                          [--webcam default|test|ID] [--replay SECONDS --save-at S1,S2]\n"
                  "       elvideo-cli stress <m0|w3|0xHWND> [cycles] [seconds] [outdir]\n"
                  "       elvideo-cli probe <file> [frame.png]\n"
                  "       elvideo-cli thumb <m0|w3|0xHWND|all> [outdir]\n"
-                 "       elvideo-cli audio | synccheck <file> | dumpinfo <file.dmp>\n");
+                 "       elvideo-cli audio | webcams | synccheck <file> | dumpinfo <file.dmp>\n");
     return 2;
 }

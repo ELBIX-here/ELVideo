@@ -1,11 +1,16 @@
 #include "RecordingSession.h"
 
+#include "core/IRecorder.h"
+
 #include "audio/AudioMixer.h"
 #include "audio/WasapiSource.h"
+#include "capture/WebcamSource.h"
 #include "capture/WgcCapture.h"
 #include "output/MediaWriter.h"
+#include "output/ReplayStream.h"
 #include "util/D3DDevice.h"
 #include "video/FramePacer.h"
+#include "video/PreviewRenderer.h"
 #include "video/VideoConverter.h"
 
 #include <spdlog/spdlog.h>
@@ -17,7 +22,6 @@
 namespace elv {
 
 RecordingSession::RecordingSession(const RecordSettings& settings) : settings_(settings) {
-    if (settings.video.codec != VideoCodec::H264) throw std::runtime_error("only H.264 is supported for now");
     if (settings.video.fps == 0) throw std::runtime_error("fps must be positive");
 
     device_ = std::make_unique<D3DDevice>(monitorForSource(settings.source));
@@ -27,10 +31,25 @@ RecordingSession::RecordingSession(const RecordSettings& settings) : settings_(s
 
     // NV12 and H.264 need even dimensions.
     const auto size = capture_->size();
-    width_ = static_cast<std::uint32_t>(std::max(2, size.Width & ~1));
-    height_ = static_cast<std::uint32_t>(std::max(2, size.Height & ~1));
+    std::optional<RECT> crop;
+    if (settings.region) {
+        // Clip the region to the source as it is now; later resizes clip again in the converter.
+        const auto& r = *settings.region;
+        const LONG left = std::clamp<LONG>(r.x, 0, size.Width);
+        const LONG top = std::clamp<LONG>(r.y, 0, size.Height);
+        const LONG right = std::clamp<LONG>(r.x + r.width, left, size.Width);
+        const LONG bottom = std::clamp<LONG>(r.y + r.height, top, size.Height);
+        if (right - left < 16 || bottom - top < 16) throw std::runtime_error("the region is outside the source or too small");
+        crop = RECT{left, top, right, bottom};
+        width_ = static_cast<std::uint32_t>((right - left) & ~1L);
+        height_ = static_cast<std::uint32_t>((bottom - top) & ~1L);
+        spdlog::info("recording region {},{} {}x{} of {}x{}", left, top, width_, height_, size.Width, size.Height);
+    } else {
+        width_ = static_cast<std::uint32_t>(std::max(2, size.Width & ~1));
+        height_ = static_cast<std::uint32_t>(std::max(2, size.Height & ~1));
+    }
 
-    converter_ = std::make_unique<VideoConverter>(*device_, width_, height_);
+    converter_ = std::make_unique<VideoConverter>(*device_, width_, height_, crop);
 
     MediaWriterConfig config;
     config.path = settings.outputPath;
@@ -38,7 +57,20 @@ RecordingSession::RecordingSession(const RecordSettings& settings) : settings_(s
     config.height = height_;
     config.fpsNumerator = settings.video.fps;
     config.bitrateKbps = settings.video.bitrateKbps;
+    config.codec = settings.video.codec;
     config.container = settings.container;
+    if (settings.replaySeconds > 0) {
+        // The buffer parses fragmented MP4, which Media Foundation writes for H.264 only.
+        replay_ = winrt::make_self<ReplayStream>(settings.replaySeconds);
+        config.byteStream = replay_.get();
+        config.codec = VideoCodec::H264;
+        config.container = Container::FragmentedMp4;
+        spdlog::info("replay buffer: last {} s, H.264", settings.replaySeconds);
+    }
+    if (config.codec != VideoCodec::H264 && config.container == Container::FragmentedMp4) {
+        spdlog::info("{} cannot go into fragmented MP4; writing plain MP4", codecName(config.codec));
+        config.container = Container::Mp4;
+    }
     config.preferHardware = settings.video.preferHardware;
     config.audio = settings.audio.enabled();
     config.audioBitrateKbps = settings.audio.bitrateKbps;
@@ -59,7 +91,9 @@ RecordingSession::RecordingSession(const RecordSettings& settings) : settings_(s
             systemSource_ = static_cast<int>(audioSources_.size());
             mixer_->setGain(systemSource_, settings.audio.systemVolume);
             audioSources_.push_back(
-                std::make_unique<WasapiSource>(AudioDeviceKind::Output, settings.audio.systemDeviceId));
+                settings.audio.systemProcessId
+                    ? std::make_unique<WasapiSource>(settings.audio.systemProcessId)
+                    : std::make_unique<WasapiSource>(AudioDeviceKind::Output, settings.audio.systemDeviceId));
         }
         if (settings.audio.captureMicrophone) {
             microphoneSource_ = static_cast<int>(audioSources_.size());
@@ -70,6 +104,15 @@ RecordingSession::RecordingSession(const RecordSettings& settings) : settings_(s
     }
 
     pacer_ = std::make_unique<FramePacer>(settings.video.fps);
+
+    if (settings.webcam) {
+        VideoConverter::OverlayPlacement placement;
+        placement.corner = static_cast<int>(settings.webcam->corner);
+        placement.widthFraction = settings.webcam->widthFraction;
+        placement.mirror = settings.webcam->mirror;
+        converter_->setOverlayPlacement(placement);
+        webcam_ = std::make_unique<WebcamSource>(settings.webcam->deviceId);
+    }
 
 #ifndef NDEBUG
     // Test hook: ELV_TEST_FAIL_AFTER_FRAMES=N simulates an encoder failure at frame N.
@@ -101,9 +144,22 @@ void RecordingSession::start(std::function<void()> onSourceClosed,
             onWarning);
     }
     pacer_->start([this](std::uint64_t frameIndex, bool) { onTick(frameIndex); });
+    if (webcam_) {
+        webcam_->start(
+            [this](const WebcamSource::Frame& frame) {
+                std::lock_guard lock(composeMutex_);
+                converter_->updateOverlay(frame.bgra, frame.width, frame.height);
+                // Redraw with the last screen frame so the camera moves on a static screen.
+                if (screenCopy_) {
+                    converter_->convert(screenCopy_.get(), screenWidth_, screenHeight_);
+                    pacer_->notifyNewFrame();
+                }
+            },
+            onWarning);
+    }
     capture_->start(
         [this](const CapturedFrame& frame) {
-            converter_->convert(frame.texture, frame.width, frame.height);
+            composeScreen(frame.texture, frame.width, frame.height);
             pacer_->notifyNewFrame();
             ++captured_;
         },
@@ -114,6 +170,7 @@ void RecordingSession::stop() {
     if (stopped_) return;
     stopped_ = true;
     capture_->stop();
+    if (webcam_) webcam_->stop();
     pacer_->stop();
     for (auto& source : audioSources_) source->stop();
     // Audio ends exactly where the video does.
@@ -164,6 +221,45 @@ void RecordingSession::onTick(std::uint64_t frameIndex) {
     if (!failed_.exchange(true) && onError_) onError_(error);
 }
 
+void RecordingSession::composeScreen(ID3D11Texture2D* texture, std::uint32_t width, std::uint32_t height) {
+    if (!webcam_) {
+        converter_->convert(texture, width, height);
+        return;
+    }
+    std::lock_guard lock(composeMutex_);
+    // WGC textures are only valid during the callback; keep a copy for camera redraws.
+    if (!screenCopy_ || width != screenWidth_ || height != screenHeight_) {
+        D3D11_TEXTURE2D_DESC desc{};
+        desc.Width = width;
+        desc.Height = height;
+        desc.MipLevels = 1;
+        desc.ArraySize = 1;
+        desc.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
+        desc.SampleDesc.Count = 1;
+        desc.Usage = D3D11_USAGE_DEFAULT;
+        desc.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_RENDER_TARGET;
+        screenCopy_ = nullptr;
+        winrt::check_hresult(device_->device()->CreateTexture2D(&desc, nullptr, screenCopy_.put()));
+        screenWidth_ = width;
+        screenHeight_ = height;
+    }
+    const D3D11_BOX box{0, 0, 0, width, height, 1};
+    device_->context()->CopySubresourceRegion(screenCopy_.get(), 0, 0, 0, 0, texture, 0, &box);
+    converter_->convert(screenCopy_.get(), width, height);
+}
+
+std::optional<std::chrono::milliseconds> RecordingSession::saveReplay(const std::filesystem::path& path) {
+    if (!replay_) return std::nullopt;
+    return replay_->save(path, settings_.replaySeconds);
+}
+
+std::optional<Thumbnail> RecordingSession::preview(std::uint32_t maxWidth, std::uint32_t maxHeight) {
+    if (captured_ == 0 || stopped_) return std::nullopt;
+    std::lock_guard lock(previewMutex_);
+    if (!previewRenderer_) previewRenderer_ = std::make_unique<PreviewRenderer>(*device_, width_, height_);
+    return previewRenderer_->render(converter_->output(), maxWidth, maxHeight);
+}
+
 SessionStats RecordingSession::stats() {
     SessionStats stats;
     stats.captured = captured_;
@@ -173,6 +269,7 @@ SessionStats RecordingSession::stats() {
     stats.droppedBusy = writerDropped_;
     if (systemSource_ >= 0) stats.systemPeak = mixer_->takePeak(systemSource_);
     if (microphoneSource_ >= 0) stats.microphonePeak = mixer_->takePeak(microphoneSource_);
+    if (replay_) stats.replayBufferedSeconds = replay_->bufferedSeconds();
     return stats;
 }
 

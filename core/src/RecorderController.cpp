@@ -101,6 +101,29 @@ bool RecorderController::stop() {
     return true;
 }
 
+bool RecorderController::saveReplay(const std::filesystem::path& path) {
+    const auto state = state_.load();
+    if (state != RecorderState::Recording && state != RecorderState::Paused) return false;
+    post([this, path] {
+        if (!session_ || !session_->replay()) return;
+        std::string error;
+        try {
+            prepareOutputPath(path);
+            if (const auto length = session_->saveReplay(path)) {
+                spdlog::info("replay saved: {} ({} ms)", winrt::to_string(path.wstring()), length->count());
+                notify([&](IRecorderListener& l) { l.onReplaySaved(path, *length); });
+                return;
+            }
+            error = "nothing is buffered yet";
+        } catch (const std::exception& e) {
+            error = e.what();
+        }
+        spdlog::warn("replay save failed: {}", error);
+        notify([&](IRecorderListener& l) { l.onWarning("cannot save replay: " + error); });
+    });
+    return true;
+}
+
 void RecorderController::post(std::function<void()> task) {
     {
         std::lock_guard lock(queueMutex_);
@@ -147,14 +170,20 @@ void RecorderController::run() {
 void RecorderController::doStart(const RecordSettings& settings) {
     notify([](IRecorderListener& l) { l.onStateChanged(RecorderState::Starting); });
 
-    const bool existed = std::filesystem::exists(settings.outputPath);
+    const bool replay = settings.replaySeconds > 0;
+    const bool existed = replay || std::filesystem::exists(settings.outputPath);
     std::string error;
     try {
-        prepareOutputPath(settings.outputPath);
-        session_ = std::make_unique<RecordingSession>(settings);
+        if (!replay) prepareOutputPath(settings.outputPath);
+        auto created = std::make_unique<RecordingSession>(settings);
+        {
+            std::lock_guard lock(sessionMutex_);
+            session_ = std::move(created);
+        }
 
         info_ = {};
-        info_.path = settings.outputPath;
+        info_.path = replay ? std::filesystem::path() : settings.outputPath;
+        info_.replay = replay;
         info_.width = session_->width();
         info_.height = session_->height();
         info_.fps = settings.video.fps;
@@ -194,7 +223,10 @@ void RecorderController::doStart(const RecordSettings& settings) {
     }
 
     if (!error.empty()) {
-        session_.reset();
+        {
+            std::lock_guard lock(sessionMutex_);
+            session_.reset();
+        }
         if (!existed) {
             std::error_code ec;
             std::filesystem::remove(settings.outputPath, ec);  // empty file left by the writer
@@ -204,7 +236,7 @@ void RecorderController::doStart(const RecordSettings& settings) {
         return;
     }
 
-    spdlog::info("recording started: {}", winrt::to_string(info_.path.wstring()));
+    spdlog::info("{} started: {}", replay ? "replay buffer" : "recording", winrt::to_string(info_.path.wstring()));
     notify([&](IRecorderListener& l) { l.onStarted(info_); });
     // stop() may already have moved us to Stopping; its queued task finishes the job.
     if (transition({RecorderState::Starting}, RecorderState::Recording))
@@ -231,11 +263,16 @@ void RecorderController::doStop(StopReason reason, const std::string& error) {
     }
 
     const RecorderStats stats = currentStats();
-    session_.reset();  // releases capture, D3D device, encoder and file
+    {
+        std::lock_guard lock(sessionMutex_);
+        session_.reset();  // releases capture, D3D device, encoder and file
+    }
     spdlog::info("recording finished ({} frames, reason {})", stats.framesEncoded, static_cast<int>(reason));
 
     const StopReason finalReason = stopError.empty() ? reason : StopReason::Error;
-    if (stats.framesEncoded > 0) {
+    if (info_.replay) {
+        // Nothing on disk: the buffer only reaches files through saveReplay().
+    } else if (stats.framesEncoded > 0) {
         notify([&](IRecorderListener& l) { l.onFinished(info_, stats, finalReason); });
     } else {
         // Stopped before the first frame: there is no playable file to report.
@@ -259,6 +296,19 @@ void RecorderController::fail(const std::string& message) {
     notify([&](IRecorderListener& l) { l.onError(message); });
 }
 
+std::optional<Thumbnail> RecorderController::preview(std::uint32_t maxWidth, std::uint32_t maxHeight) {
+    std::lock_guard lock(sessionMutex_);
+    if (!session_) return std::nullopt;
+    try {
+        return session_->preview(maxWidth, maxHeight);
+    } catch (const winrt::hresult_error& e) {
+        spdlog::warn("preview failed: {}", winrt::to_string(e.message()));
+    } catch (const std::exception& e) {
+        spdlog::warn("preview failed: {}", e.what());
+    }
+    return std::nullopt;
+}
+
 RecorderStats RecorderController::currentStats() const {
     RecorderStats stats;
     if (!session_) return stats;
@@ -267,6 +317,7 @@ RecorderStats RecorderController::currentStats() const {
     stats.framesEncoded = s.encoded;
     stats.framesDuplicated = s.duplicated;
     stats.framesDropped = s.dropped();
+    stats.replayBufferedSeconds = s.replayBufferedSeconds;
     stats.systemPeak = s.systemPeak;
     stats.microphonePeak = s.microphonePeak;
     if (info_.fps) stats.elapsed = std::chrono::milliseconds(session_->recordedFrames() * 1000 / info_.fps);

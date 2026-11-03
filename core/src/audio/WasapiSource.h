@@ -30,6 +30,9 @@ public:
     using WarningHandler = std::function<void(const std::string&)>;
 
     WasapiSource(AudioDeviceKind kind, std::wstring deviceId);
+    // Process loopback: only the audio of `processId` and its child processes
+    // (Windows 10 build 20348 / Windows 11 and later).
+    explicit WasapiSource(std::uint32_t processId);
     ~WasapiSource();
 
     WasapiSource(const WasapiSource&) = delete;
@@ -48,6 +51,7 @@ private:
 
     const AudioDeviceKind kind_;
     const std::wstring requestedId_;
+    const std::uint32_t processId_ = 0;
     PacketHandler onPacket_;
     WarningHandler onWarning_;
     HANDLE stopEvent_ = nullptr;

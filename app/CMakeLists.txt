@@ -24,6 +24,8 @@ qt_add_executable(elv_app WIN32
 set_target_properties(elv_app PROPERTIES OUTPUT_NAME ELVideo)
 
 set_source_files_properties(qml/Theme.qml PROPERTIES QT_QML_SINGLETON_TYPE TRUE)
+# The resource compiler's include of the generated version header is not tracked.
+set_source_files_properties(resources/elvideo.rc PROPERTIES OBJECT_DEPENDS ${CMAKE_BINARY_DIR}/generated/elv_version.h)
 
 qt_add_qml_module(elv_app
     URI ELVideo
@@ -46,12 +48,19 @@ qt_add_qml_module(elv_app
         qml/Toast.qml
         qml/ToggleSwitch.qml
         qml/LevelMeter.qml
+        qml/RegionSelector.qml
+        qml/RegionFrame.qml
+        qml/PreviewPanel.qml
 )
 
 qt_add_resources(elv_app "icons"
     PREFIX "/"
     BASE resources
     FILES resources/elvideo.ico)
+
+# qmlcachegen's ahead-of-time compiled QML (.rcc/qmlcache/*.cpp) trips C4702
+# (unreachable code) inside Qt headers under /W4.
+target_compile_options(elv_app PRIVATE /wd4702)
 
 target_link_libraries(elv_app PRIVATE
     elv::core

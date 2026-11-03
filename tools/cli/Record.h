@@ -5,6 +5,7 @@
 #include <filesystem>
 #include <optional>
 #include <string>
+#include <vector>
 
 inline elv::AudioSettings noAudio() {
     elv::AudioSettings audio;
@@ -19,6 +20,12 @@ struct RecordArgs {
     elv::VideoSettings video;
     elv::Container container = elv::Container::FragmentedMp4;
     elv::AudioSettings audio = noAudio();
+    std::optional<elv::CaptureRegion> region;
+    std::filesystem::path previewPng;  // saved halfway through
+    bool appAudio = false;             // window sources: only that app's audio
+    std::optional<elv::WebcamOverlay> webcam;
+    double replaySeconds = 0;
+    std::vector<int> saveAt;  // replay mode: wall seconds to save at
     int pauseAt = -1;   // wall-clock second to pause at
     int resumeAt = -1;  // wall-clock second to resume at
 };
