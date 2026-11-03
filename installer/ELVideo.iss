@@ -30,6 +30,7 @@ MinVersion=10.0.19041
 OutputDir={#OutputDir}
 OutputBaseFilename=ELVideo-{#AppVersion}-setup
 SetupIconFile=..\app\resources\elvideo.ico
+LicenseFile=..\LICENSE
 UninstallDisplayIcon={app}\ELVideo.exe
 UninstallDisplayName=ELVideo
 Compression=lzma2/max

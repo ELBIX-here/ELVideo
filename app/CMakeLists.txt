@@ -1,4 +1,4 @@
-find_package(Qt6 6.8 REQUIRED COMPONENTS Quick QuickControls2 Widgets)
+find_package(Qt6 6.8 REQUIRED COMPONENTS Quick QuickControls2 Widgets OpenGL)
 find_package(spdlog CONFIG REQUIRED)
 find_package(nlohmann_json CONFIG REQUIRED)
 
@@ -14,8 +14,12 @@ qt_add_executable(elv_app WIN32
     src/Desktop.cpp
     src/Hotkeys.h
     src/Hotkeys.cpp
+    src/OverlayGeometry.h
+    src/OverlayGeometry.cpp
     src/RecorderModel.h
     src/RecorderModel.cpp
+    src/ScreenCapture.h
+    src/ScreenCapture.cpp
     src/SourceModel.h
     src/SourceModel.cpp
     src/TrayIcon.h
@@ -26,6 +30,24 @@ set_target_properties(elv_app PROPERTIES OUTPUT_NAME ELVideo)
 set_source_files_properties(qml/Theme.qml PROPERTIES QT_QML_SINGLETON_TYPE TRUE)
 # The resource compiler's include of the generated version header is not tracked.
 set_source_files_properties(resources/elvideo.rc PROPERTIES OBJECT_DEPENDS ${CMAKE_BINARY_DIR}/generated/elv_version.h)
+
+# The player (libmpv) is optional; without it `--player` explains it is missing.
+set(ELV_PLAYER_QML)
+if(ELV_HAVE_MPV)
+    target_sources(elv_app PRIVATE
+        src/player/MpvItem.h
+        src/player/MpvItem.cpp
+        src/player/PlayerMain.h
+        src/player/PlayerMain.cpp)
+    # src: "player/MpvItem.h"; src/player: the generated QML type registration includes <MpvItem.h>
+    target_include_directories(elv_app PRIVATE src src/player)
+    target_compile_definitions(elv_app PRIVATE ELV_HAVE_MPV)
+    target_link_libraries(elv_app PRIVATE libmpv Qt6::OpenGL)
+    add_custom_command(TARGET elv_app POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:libmpv> $<TARGET_FILE_DIR:elv_app>
+        COMMENT "Copying libmpv-2.dll")
+    set(ELV_PLAYER_QML qml/Player.qml qml/SeekBar.qml)
+endif()
 
 qt_add_qml_module(elv_app
     URI ELVideo
@@ -51,6 +73,8 @@ qt_add_qml_module(elv_app
         qml/RegionSelector.qml
         qml/RegionFrame.qml
         qml/PreviewPanel.qml
+        qml/ScreenshotOverlay.qml
+        ${ELV_PLAYER_QML}
 )
 
 qt_add_resources(elv_app "icons"

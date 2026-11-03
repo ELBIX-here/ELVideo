@@ -2,7 +2,9 @@
 
 #include <QDesktopServices>
 #include <QDir>
+#include <QCoreApplication>
 #include <QFileInfo>
+#include <QProcess>
 #include <QWindow>
 
 #include <windows.h>
@@ -37,6 +39,24 @@ void Desktop::useDarkTitleBar(QWindow* window) const {
 }
 
 void Desktop::openFile(const QString& path) const { QDesktopServices::openUrl(QUrl::fromLocalFile(path)); }
+
+bool Desktop::hasPlayer() const {
+#ifdef ELV_HAVE_MPV
+    return true;
+#else
+    return false;
+#endif
+}
+
+void Desktop::openInPlayer(const QString& path) const {
+    if (!hasPlayer()) {
+        if (!path.isEmpty()) openFile(path);
+        return;
+    }
+    QStringList args{QStringLiteral("--player")};
+    if (!path.isEmpty()) args << QDir::toNativeSeparators(path);
+    QProcess::startDetached(QCoreApplication::applicationFilePath(), args);
+}
 
 void Desktop::revealFile(const QString& path) const {
     const std::wstring native = QDir::toNativeSeparators(path).toStdWString();

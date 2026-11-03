@@ -40,6 +40,7 @@ QtObject {
     readonly property string iconMicrophone: "\uE720"
     readonly property string iconSave: "\uE74E"
     readonly property string iconReplay: "\uE81C"
+    readonly property string iconCamera: "\uE722"
 
     function formatTime(ms) {
         const s = Math.floor(ms / 1000)

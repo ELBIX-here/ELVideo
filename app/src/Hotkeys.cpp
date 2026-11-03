@@ -2,6 +2,9 @@
 
 #include <QKeySequence>
 
+#include <algorithm>
+#include <iterator>
+
 #include <spdlog/spdlog.h>
 
 namespace {
@@ -60,7 +63,7 @@ Hotkeys::Hotkeys(QObject* parent) : QObject(parent) {
 
 Hotkeys::~Hotkeys() {
     if (!hwnd_) return;
-    for (int id : {StartStop, Pause, Replay})
+    for (int id : {StartStop, Pause, Replay, Screenshot})
         if (registered_[id]) UnregisterHotKey(hwnd_, id);
     DestroyWindow(hwnd_);
 }
@@ -89,11 +92,15 @@ LRESULT CALLBACK Hotkeys::windowProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) 
     return DefWindowProcW(hwnd, msg, wp, lp);
 }
 
-void Hotkeys::setSequences(const QString& startStop, const QString& pause, const QString& replay) {
-    if (sequences_[StartStop] == startStop && sequences_[Pause] == pause && sequences_[Replay] == replay) return;
+void Hotkeys::setSequences(const QString& startStop, const QString& pause, const QString& replay,
+                           const QString& screenshot) {
+    if (sequences_[StartStop] == startStop && sequences_[Pause] == pause && sequences_[Replay] == replay &&
+        sequences_[Screenshot] == screenshot)
+        return;
     sequences_[StartStop] = startStop;
     sequences_[Pause] = pause;
     sequences_[Replay] = replay;
+    sequences_[Screenshot] = screenshot;
     apply();
 }
 
@@ -106,19 +113,20 @@ void Hotkeys::setSuspended(bool suspended) {
 
 void Hotkeys::apply() {
     if (!hwnd_) return;
-    for (int id : {StartStop, Pause, Replay}) {
+    const Id ids[] = {StartStop, Pause, Replay, Screenshot};
+    for (int id : ids) {
         if (registered_[id]) UnregisterHotKey(hwnd_, id);
         registered_[id] = false;
     }
     if (!suspended_) {
-        errors_[StartStop] = registerOne(StartStop, sequences_[StartStop]);
-        errors_[Pause] = sequences_[Pause] == sequences_[StartStop] && !sequences_[Pause].isEmpty()
-                             ? tr("시작/정지와 같은 단축키입니다.")
-                             : registerOne(Pause, sequences_[Pause]);
-        const QString& replay = sequences_[Replay];
-        errors_[Replay] = !replay.isEmpty() && (replay == sequences_[StartStop] || replay == sequences_[Pause])
-                              ? tr("다른 동작과 같은 단축키입니다.")
-                              : registerOne(Replay, replay);
+        // Register in order; a combination already taken by an earlier action is reported.
+        for (std::size_t i = 0; i < std::size(ids); ++i) {
+            const QString& sequence = sequences_[ids[i]];
+            const bool duplicate = !sequence.isEmpty() && std::any_of(ids, ids + i, [&](Id earlier) {
+                return sequences_[earlier] == sequence;
+            });
+            errors_[ids[i]] = duplicate ? tr("다른 동작과 같은 단축키입니다.") : registerOne(ids[i], sequence);
+        }
     }
     emit errorsChanged();
 }

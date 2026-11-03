@@ -1,4 +1,5 @@
-// captureThumbnail(): one frame of a source, downscaled on the CPU.
+// captureThumbnail() and captureImage(): one frame of a source, cropped and
+// (for thumbnails) downscaled on the CPU.
 
 #include "core/IRecorder.h"
 
@@ -67,23 +68,22 @@ private:
 
 }  // namespace
 
-std::optional<Thumbnail> captureThumbnail(const CaptureSource& source, std::uint32_t maxWidth,
-                                          std::uint32_t maxHeight, const std::optional<CaptureRegion>& region,
-                                          std::chrono::milliseconds timeout) {
-    if (maxWidth == 0 || maxHeight == 0) return std::nullopt;
+namespace {
+
+// One frame of the source at full resolution, or nullopt when none arrives in time.
+std::optional<Thumbnail> grab(const CaptureSource& source, bool cursor, std::chrono::milliseconds timeout) {
     if (source.kind == SourceKind::Window && IsIconic(reinterpret_cast<HWND>(source.handle))) return std::nullopt;
 
     ComScope com;
     try {
         D3DDevice device(monitorForSource(source));
         CaptureOptions options;
-        options.captureCursor = false;
+        options.captureCursor = cursor;
         WgcCapture capture(device, source, options);
 
         std::mutex mutex;
         std::condition_variable ready;
-        std::vector<std::uint8_t> pixels;
-        std::uint32_t width = 0, height = 0;
+        Thumbnail image;
         bool done = false;
 
         capture.start(
@@ -94,9 +94,9 @@ std::optional<Thumbnail> captureThumbnail(const CaptureSource& source, std::uint
                 }
                 auto copy = readTexturePixels(device, frame.texture, frame.width, frame.height);
                 std::lock_guard lock(mutex);
-                pixels = std::move(copy);
-                width = frame.width;
-                height = frame.height;
+                image.bgra = std::move(copy);
+                image.width = frame.width;
+                image.height = frame.height;
                 done = true;
                 ready.notify_all();
             },
@@ -111,29 +111,52 @@ std::optional<Thumbnail> captureThumbnail(const CaptureSource& source, std::uint
             ready.wait_for(lock, timeout, [&] { return done; });
         }
         capture.stop();
-
-        if (pixels.empty()) return std::nullopt;
-        if (region) {
-            const auto x0 = static_cast<std::uint32_t>(std::clamp(region->x, 0, static_cast<std::int32_t>(width)));
-            const auto y0 = static_cast<std::uint32_t>(std::clamp(region->y, 0, static_cast<std::int32_t>(height)));
-            const auto x1 = static_cast<std::uint32_t>(
-                std::clamp(region->x + region->width, static_cast<std::int32_t>(x0), static_cast<std::int32_t>(width)));
-            const auto y1 = static_cast<std::uint32_t>(
-                std::clamp(region->y + region->height, static_cast<std::int32_t>(y0), static_cast<std::int32_t>(height)));
-            if (x1 <= x0 || y1 <= y0) return std::nullopt;
-            std::vector<std::uint8_t> cropped(static_cast<std::size_t>(x1 - x0) * (y1 - y0) * 4);
-            for (std::uint32_t y = y0; y < y1; ++y)
-                std::copy_n(pixels.data() + (static_cast<std::size_t>(y) * width + x0) * 4, (x1 - x0) * 4,
-                            cropped.data() + static_cast<std::size_t>(y - y0) * (x1 - x0) * 4);
-            return downscale(cropped, x1 - x0, y1 - y0, maxWidth, maxHeight);
-        }
-        return downscale(pixels, width, height, maxWidth, maxHeight);
+        if (image.bgra.empty()) return std::nullopt;
+        return image;
     } catch (const winrt::hresult_error& e) {
-        spdlog::warn("thumbnail failed: {}", winrt::to_string(e.message()));
+        spdlog::warn("capture failed: {}", winrt::to_string(e.message()));
     } catch (const std::exception& e) {
-        spdlog::warn("thumbnail failed: {}", e.what());
+        spdlog::warn("capture failed: {}", e.what());
     }
     return std::nullopt;
+}
+
+// The region clipped to the image; nullopt when nothing is left.
+std::optional<Thumbnail> crop(const Thumbnail& image, const CaptureRegion& region) {
+    const auto width = static_cast<std::int32_t>(image.width);
+    const auto height = static_cast<std::int32_t>(image.height);
+    const auto x0 = static_cast<std::uint32_t>(std::clamp(region.x, 0, width));
+    const auto y0 = static_cast<std::uint32_t>(std::clamp(region.y, 0, height));
+    const auto x1 = static_cast<std::uint32_t>(std::clamp(region.x + region.width, static_cast<std::int32_t>(x0), width));
+    const auto y1 = static_cast<std::uint32_t>(std::clamp(region.y + region.height, static_cast<std::int32_t>(y0), height));
+    if (x1 <= x0 || y1 <= y0) return std::nullopt;
+    Thumbnail out;
+    out.width = x1 - x0;
+    out.height = y1 - y0;
+    out.bgra.resize(static_cast<std::size_t>(out.width) * out.height * 4);
+    for (std::uint32_t y = y0; y < y1; ++y)
+        std::copy_n(image.bgra.data() + (static_cast<std::size_t>(y) * image.width + x0) * 4, out.width * 4,
+                    out.bgra.data() + static_cast<std::size_t>(y - y0) * out.width * 4);
+    return out;
+}
+
+}  // namespace
+
+std::optional<Thumbnail> captureThumbnail(const CaptureSource& source, std::uint32_t maxWidth,
+                                          std::uint32_t maxHeight, const std::optional<CaptureRegion>& region,
+                                          std::chrono::milliseconds timeout) {
+    if (maxWidth == 0 || maxHeight == 0) return std::nullopt;
+    auto image = grab(source, false, timeout);
+    if (image && region) image = crop(*image, *region);
+    if (!image) return std::nullopt;
+    return downscale(image->bgra, image->width, image->height, maxWidth, maxHeight);
+}
+
+std::optional<Thumbnail> captureImage(const CaptureSource& source, const std::optional<CaptureRegion>& region,
+                                      bool includeCursor, std::chrono::milliseconds timeout) {
+    auto image = grab(source, includeCursor, timeout);
+    if (image && region) image = crop(*image, *region);
+    return image;
 }
 
 }  // namespace elv

@@ -11,10 +11,14 @@ Rectangle {
     property bool isError: false
     property bool isWarning: false
     property string folderPath  // shows an "open folder" button
+    property string openLabel: qsTr("재생")
+    property bool video: true  // open in ELVideo's player rather than the default app
 
-    function showSaved(text, path) {
+    function showSaved(text, path, openText) {
         message = text
-        filePath = path
+        filePath = path || ""
+        openLabel = openText || qsTr("재생")
+        video = !openText
         folderPath = ""
         isError = false
         isWarning = false
@@ -99,8 +103,8 @@ Rectangle {
         }
         Button {
             visible: toast.filePath.length > 0
-            text: qsTr("재생")
-            onClicked: desktop.openFile(toast.filePath)
+            text: toast.openLabel
+            onClicked: toast.video ? desktop.openInPlayer(toast.filePath) : desktop.openFile(toast.filePath)
         }
         Button {
             visible: toast.filePath.length > 0

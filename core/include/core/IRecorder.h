@@ -85,4 +85,12 @@ std::optional<Thumbnail> captureThumbnail(const CaptureSource& source, std::uint
                                           const std::optional<CaptureRegion>& region = std::nullopt,
                                           std::chrono::milliseconds timeout = std::chrono::milliseconds(800));
 
+// Screenshot: one frame of the source at full resolution (physical pixels),
+// optionally cropped to `region`, with or without the mouse cursor. Same
+// threading and failure rules as captureThumbnail().
+std::optional<Thumbnail> captureImage(const CaptureSource& source,
+                                      const std::optional<CaptureRegion>& region = std::nullopt,
+                                      bool includeCursor = false,
+                                      std::chrono::milliseconds timeout = std::chrono::milliseconds(1000));
+
 }  // namespace elv

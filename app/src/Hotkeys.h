@@ -13,21 +13,23 @@ class Hotkeys : public QObject {
     Q_PROPERTY(QString startStopError READ startStopError NOTIFY errorsChanged)
     Q_PROPERTY(QString pauseError READ pauseError NOTIFY errorsChanged)
     Q_PROPERTY(QString replayError READ replayError NOTIFY errorsChanged)
+    Q_PROPERTY(QString screenshotError READ screenshotError NOTIFY errorsChanged)
     // While true (a hotkey field is being edited) nothing is registered, so the
     // field receives the key combination instead of the running hotkey.
     Q_PROPERTY(bool suspended READ suspended WRITE setSuspended NOTIFY suspendedChanged)
 
 public:
-    enum Id { StartStop = 1, Pause = 2, Replay = 3 };
+    enum Id { StartStop = 1, Pause = 2, Replay = 3, Screenshot = 4 };
 
     explicit Hotkeys(QObject* parent = nullptr);
     ~Hotkeys() override;
 
-    void setSequences(const QString& startStop, const QString& pause, const QString& replay);
+    void setSequences(const QString& startStop, const QString& pause, const QString& replay, const QString& screenshot);
 
     QString startStopError() const { return errors_[StartStop]; }
     QString pauseError() const { return errors_[Pause]; }
     QString replayError() const { return errors_[Replay]; }
+    QString screenshotError() const { return errors_[Screenshot]; }
     bool suspended() const { return suspended_; }
     void setSuspended(bool suspended);
 
@@ -50,8 +52,8 @@ private:
     QString registerOne(Id id, const QString& sequence);
 
     HWND hwnd_ = nullptr;
-    QString sequences_[4];
-    QString errors_[4];
-    bool registered_[4]{};
+    QString sequences_[5];
+    QString errors_[5];
+    bool registered_[5]{};
     bool suspended_ = false;
 };

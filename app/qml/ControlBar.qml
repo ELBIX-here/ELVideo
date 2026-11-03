@@ -105,6 +105,15 @@ Rectangle {
                 opacity: enabled ? 1 : 0.35
                 onClicked: bar.replay ? recorder.stop() : recorder.startReplay()
             }
+            IconButton {
+                Layout.preferredWidth: 40
+                Layout.preferredHeight: 40
+                glyph: Theme.iconCamera
+                iconSize: 18
+                tip: qsTr("화면 캡처") + "  (" + appSettings.hotkeyScreenshot + ")"
+                enabled: !screenCapture.busy && !screenCapture.active
+                onClicked: screenCapture.start()
+            }
         }
 
         // Right: time and state.

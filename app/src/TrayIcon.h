@@ -22,6 +22,7 @@ public:
 signals:
     void showRequested();
     void quitRequested();
+    void screenshotRequested();
 
 private:
     void update();

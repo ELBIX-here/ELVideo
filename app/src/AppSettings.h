@@ -33,6 +33,14 @@ class AppSettings : public QObject {
     Q_PROPERTY(QString hotkeyPause MEMBER hotkeyPause NOTIFY changed)
     Q_PROPERTY(QString hotkeyReplay MEMBER hotkeyReplay NOTIFY changed)
     Q_PROPERTY(int replaySeconds MEMBER replaySeconds NOTIFY changed)
+    Q_PROPERTY(QString hotkeyScreenshot MEMBER hotkeyScreenshot NOTIFY changed)
+    Q_PROPERTY(QString screenshotDir MEMBER screenshotDir NOTIFY changed)        // empty: default
+    Q_PROPERTY(QString screenshotFormat MEMBER screenshotFormat NOTIFY changed)  // "png" | "jpg"
+    Q_PROPERTY(bool screenshotCopy MEMBER screenshotCopy NOTIFY changed)         // to the clipboard
+    Q_PROPERTY(bool screenshotSave MEMBER screenshotSave NOTIFY changed)         // to a file
+    Q_PROPERTY(bool screenshotCursor MEMBER screenshotCursor NOTIFY changed)
+    Q_PROPERTY(int screenshotDelay MEMBER screenshotDelay NOTIFY changed)        // seconds
+    Q_PROPERTY(QString defaultScreenshotDir READ defaultScreenshotDir CONSTANT)
     Q_PROPERTY(bool hideWindowWhileRecording MEMBER hideWindowWhileRecording NOTIFY changed)
     Q_PROPERTY(bool showFloatingBar MEMBER showFloatingBar NOTIFY changed)
     Q_PROPERTY(bool closeToTray MEMBER closeToTray NOTIFY changed)
@@ -51,6 +59,8 @@ public:
     // outputDir, or the default when it is empty.
     QString effectiveOutputDir() const;
     static QString defaultOutputDir();
+    QString effectiveScreenshotDir() const;
+    static QString defaultScreenshotDir();
     static QString filePath();
 
     QString outputDir;
@@ -77,6 +87,13 @@ public:
     QString hotkeyPause;
     QString hotkeyReplay;
     int replaySeconds = 30;
+    QString hotkeyScreenshot;
+    QString screenshotDir;
+    QString screenshotFormat = QStringLiteral("png");
+    bool screenshotCopy = true;
+    bool screenshotSave = true;
+    bool screenshotCursor = false;
+    int screenshotDelay = 0;
     bool hideWindowWhileRecording = true;
     bool showFloatingBar = true;
     bool closeToTray = true;
@@ -85,6 +102,7 @@ public:
     static constexpr auto kDefaultStartStop = "Ctrl+Shift+F9";
     static constexpr auto kDefaultPause = "Ctrl+Shift+F10";
     static constexpr auto kDefaultReplay = "Ctrl+Shift+F11";
+    static constexpr auto kDefaultScreenshot = "Ctrl+Shift+F12";
 
 signals:
     void changed();

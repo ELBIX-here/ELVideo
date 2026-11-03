@@ -35,7 +35,8 @@ AppSettings::AppSettings(QObject* parent)
     : QObject(parent),
       hotkeyStartStop(QString::fromLatin1(kDefaultStartStop)),
       hotkeyPause(QString::fromLatin1(kDefaultPause)),
-      hotkeyReplay(QString::fromLatin1(kDefaultReplay)) {
+      hotkeyReplay(QString::fromLatin1(kDefaultReplay)),
+      hotkeyScreenshot(QString::fromLatin1(kDefaultScreenshot)) {
     saveTimer_.setSingleShot(true);
     saveTimer_.setInterval(500);
     connect(&saveTimer_, &QTimer::timeout, this, &AppSettings::save);
@@ -54,6 +55,14 @@ QString AppSettings::filePath() {
 
 QString AppSettings::defaultOutputDir() {
     return QStandardPaths::writableLocation(QStandardPaths::MoviesLocation) + QStringLiteral("/ELVideo");
+}
+
+QString AppSettings::defaultScreenshotDir() {
+    return QStandardPaths::writableLocation(QStandardPaths::PicturesLocation) + QStringLiteral("/ELVideo");
+}
+
+QString AppSettings::effectiveScreenshotDir() const {
+    return screenshotDir.isEmpty() ? defaultScreenshotDir() : screenshotDir;
 }
 
 QString AppSettings::effectiveOutputDir() const { return outputDir.isEmpty() ? defaultOutputDir() : outputDir; }
@@ -95,6 +104,14 @@ void AppSettings::load() {
     hotkeyPause = str(j, "hotkeyPause", hotkeyPause);
     hotkeyReplay = str(j, "hotkeyReplay", hotkeyReplay);
     replaySeconds = std::clamp(value(j, "replaySeconds", replaySeconds), 5, 600);
+    hotkeyScreenshot = str(j, "hotkeyScreenshot", hotkeyScreenshot);
+    screenshotDir = str(j, "screenshotDir", screenshotDir);
+    screenshotFormat = str(j, "screenshotFormat", screenshotFormat) == QLatin1String("jpg") ? QStringLiteral("jpg")
+                                                                                        : QStringLiteral("png");
+    screenshotCopy = value(j, "screenshotCopy", screenshotCopy);
+    screenshotSave = value(j, "screenshotSave", screenshotSave);
+    screenshotCursor = value(j, "screenshotCursor", screenshotCursor);
+    screenshotDelay = std::clamp(value(j, "screenshotDelay", screenshotDelay), 0, 60);
     hideWindowWhileRecording = value(j, "hideWindowWhileRecording", hideWindowWhileRecording);
     showFloatingBar = value(j, "showFloatingBar", showFloatingBar);
     closeToTray = value(j, "closeToTray", closeToTray);
@@ -130,6 +147,13 @@ void AppSettings::save() {
         {"hotkeyPause", hotkeyPause.toStdString()},
         {"hotkeyReplay", hotkeyReplay.toStdString()},
         {"replaySeconds", replaySeconds},
+        {"hotkeyScreenshot", hotkeyScreenshot.toStdString()},
+        {"screenshotDir", screenshotDir.toStdString()},
+        {"screenshotFormat", screenshotFormat.toStdString()},
+        {"screenshotCopy", screenshotCopy},
+        {"screenshotSave", screenshotSave},
+        {"screenshotCursor", screenshotCursor},
+        {"screenshotDelay", screenshotDelay},
         {"hideWindowWhileRecording", hideWindowWhileRecording},
         {"showFloatingBar", showFloatingBar},
         {"closeToTray", closeToTray},
@@ -150,5 +174,6 @@ void AppSettings::resetHotkeys() {
     hotkeyStartStop = QString::fromLatin1(kDefaultStartStop);
     hotkeyPause = QString::fromLatin1(kDefaultPause);
     hotkeyReplay = QString::fromLatin1(kDefaultReplay);
+    hotkeyScreenshot = QString::fromLatin1(kDefaultScreenshot);
     emit changed();
 }

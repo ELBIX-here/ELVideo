@@ -25,6 +25,8 @@ target_compile_definitions(elv_options INTERFACE
 configure_file(cmake/elv_version.h.in ${CMAKE_BINARY_DIR}/generated/elv_version.h @ONLY)
 target_include_directories(elv_options INTERFACE ${CMAKE_BINARY_DIR}/generated)
 
+include(cmake/Libmpv.cmake)  # optional: the player needs it
+
 add_subdirectory(core)
 
 if(ELV_BUILD_CLI)

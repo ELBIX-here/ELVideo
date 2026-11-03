@@ -4,8 +4,12 @@
 #include "src/Desktop.h"
 #include "src/Hotkeys.h"
 #include "src/RecorderModel.h"
+#include "src/ScreenCapture.h"
 #include "src/SourceModel.h"
 #include "src/TrayIcon.h"
+#ifdef ELV_HAVE_MPV
+#include "src/player/PlayerMain.h"
+#endif
 
 #include <QApplication>
 #include <QDir>
@@ -16,17 +20,20 @@
 
 #include <windows.h>
 
+#include <string_view>
+
 #include <spdlog/sinks/rotating_file_sink.h>
 #include <spdlog/spdlog.h>
 
 namespace {
 
-// %LOCALAPPDATA%\ELVideo\logs\elvideo.log (engine and Qt messages), 3 x 5 MB.
-void setupLogging() {
+// %LOCALAPPDATA%\ELVideo\logs\<name>.log (engine and Qt messages), 3 x 5 MB. The
+// recorder and player processes use separate files so rotation never collides.
+void setupLogging(const QString& name) {
     const QString dir = QDir::fromNativeSeparators(qEnvironmentVariable("LOCALAPPDATA")) + QStringLiteral("/ELVideo/logs");
     QDir().mkpath(dir);
     try {
-        auto logger = spdlog::rotating_logger_mt("elvideo", QDir::toNativeSeparators(dir + QStringLiteral("/elvideo.log")).toLocal8Bit().toStdString(),
+        auto logger = spdlog::rotating_logger_mt("elvideo", QDir::toNativeSeparators(dir + QStringLiteral("/") + name + QStringLiteral(".log")).toLocal8Bit().toStdString(),
                                                  5 * 1024 * 1024, 3);
         logger->flush_on(spdlog::level::warn);
         spdlog::set_default_logger(logger);
@@ -51,6 +58,17 @@ void setupLogging() {
 int main(int argc, char* argv[]) {
     CrashHandler::install(QString::fromLatin1(elv::version()));
 
+    for (int i = 1; i < argc; ++i) {
+        if (std::string_view(argv[i]) != "--player") continue;
+#ifdef ELV_HAVE_MPV
+        setupLogging(QStringLiteral("elvideo-player"));
+        return runPlayer(argc, argv);
+#else
+        MessageBoxW(nullptr, L"This ELVideo build has no video player (libmpv was missing).", L"ELVideo", MB_ICONWARNING);
+        return 1;
+#endif
+    }
+
     // One instance owns the hotkeys and the tray icon; a second launch shows the first.
     const HANDLE instanceMutex = CreateMutexW(nullptr, FALSE, L"Local\\ELVideo.SingleInstance");
     if (instanceMutex && GetLastError() == ERROR_ALREADY_EXISTS) {
@@ -65,7 +83,7 @@ int main(int argc, char* argv[]) {
     QApplication::setQuitOnLastWindowClosed(false);  // the tray keeps running
     QQuickStyle::setStyle(QStringLiteral("Basic"));
 
-    setupLogging();
+    setupLogging(QStringLiteral("elvideo"));
     const auto platform = elv::queryPlatform();
     spdlog::info("ELVideo {} starting on Windows {}", elv::version(), platform.windowsBuild);
 
@@ -94,9 +112,15 @@ int main(int argc, char* argv[]) {
     Desktop desktop;
     TrayIcon tray(recorder, settings, desktop);
 
+    ScreenCapture screenCapture(settings);
+    // From the tray menu: give the menu time to close so it is not in the picture.
+    QObject::connect(&tray, &TrayIcon::screenshotRequested, &screenCapture,
+                     [&] { QTimer::singleShot(250, &screenCapture, &ScreenCapture::start); });
+
     Hotkeys hotkeys;
     const auto applyHotkeys = [&] {
-        hotkeys.setSequences(settings.hotkeyStartStop, settings.hotkeyPause, settings.hotkeyReplay);
+        hotkeys.setSequences(settings.hotkeyStartStop, settings.hotkeyPause, settings.hotkeyReplay,
+                             settings.hotkeyScreenshot);
     };
     QObject::connect(&settings, &AppSettings::changed, &hotkeys, applyHotkeys);
     applyHotkeys();
@@ -107,12 +131,15 @@ int main(int argc, char* argv[]) {
             recorder.togglePause();
         else if (id == Hotkeys::Replay)
             recorder.replayHotkey();
+        else if (id == Hotkeys::Screenshot)
+            screenCapture.start();
     });
     QObject::connect(&tray, &TrayIcon::quitRequested, &app, &QCoreApplication::quit);
 
     QQmlApplicationEngine engine;
     engine.addImageProvider(QStringLiteral("thumbnail"), new ThumbnailProvider);
     engine.addImageProvider(QStringLiteral("preview"), new PreviewProvider(recorder.engine()));
+    engine.addImageProvider(QStringLiteral("frozen"), new FrozenImageProvider(screenCapture));
     auto* context = engine.rootContext();
     context->setContextProperty(QStringLiteral("engineVersion"), QString::fromLatin1(elv::version()));
     context->setContextProperty(QStringLiteral("captureSupported"), platform.captureSupported);
@@ -122,6 +149,12 @@ int main(int argc, char* argv[]) {
     context->setContextProperty(QStringLiteral("hotkeys"), &hotkeys);
     context->setContextProperty(QStringLiteral("tray"), &tray);
     context->setContextProperty(QStringLiteral("desktop"), &desktop);
+    context->setContextProperty(QStringLiteral("screenCapture"), &screenCapture);
+#ifdef NDEBUG
+    context->setContextProperty(QStringLiteral("debugBuild"), false);
+#else
+    context->setContextProperty(QStringLiteral("debugBuild"), true);
+#endif
     context->setContextProperty(QStringLiteral("crashDumps"), crashDumps);
     context->setContextProperty(QStringLiteral("crashDumpDir"), CrashHandler::dumpDirectory());
 

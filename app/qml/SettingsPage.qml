@@ -102,6 +102,13 @@ Item {
     }
 
     FolderDialog {
+        id: shotFolderDialog
+        title: qsTr("캡처 저장 폴더")
+        currentFolder: desktop.toUrl(appSettings.screenshotDir || appSettings.defaultScreenshotDir)
+        onAccepted: appSettings.screenshotDir = desktop.toLocalFile(selectedFolder)
+    }
+
+    FolderDialog {
         id: folderDialog
         title: qsTr("녹화 저장 폴더")
         currentFolder: desktop.toUrl(page.outputDir)
@@ -381,6 +388,64 @@ Item {
             }
 
             Section {
+                title: qsTr("화면 캡처")
+                SettingRow {
+                    label: qsTr("클립보드에 복사")
+                    ToggleSwitch {
+                        checked: appSettings.screenshotCopy
+                        onToggled: appSettings.screenshotCopy = checked
+                    }
+                }
+                SettingRow {
+                    label: qsTr("파일로 저장")
+                    description: desktop.nativePath(appSettings.screenshotDir || appSettings.defaultScreenshotDir)
+                    Row {
+                        spacing: 8
+                        ToggleSwitch {
+                            anchors.verticalCenter: parent.verticalCenter
+                            checked: appSettings.screenshotSave
+                            onToggled: appSettings.screenshotSave = checked
+                        }
+                        Button {
+                            text: qsTr("변경…")
+                            onClicked: shotFolderDialog.open()
+                        }
+                        Button {
+                            text: qsTr("열기")
+                            onClicked: desktop.openFolder(appSettings.screenshotDir || appSettings.defaultScreenshotDir)
+                        }
+                    }
+                }
+                SettingRow {
+                    label: qsTr("이미지 형식")
+                    ComboBox {
+                        width: 200
+                        model: ["PNG", qsTr("JPG (작은 파일)")]
+                        currentIndex: appSettings.screenshotFormat === "jpg" ? 1 : 0
+                        onActivated: index => appSettings.screenshotFormat = index === 1 ? "jpg" : "png"
+                    }
+                }
+                SettingRow {
+                    label: qsTr("마우스 커서 포함")
+                    ToggleSwitch {
+                        checked: appSettings.screenshotCursor
+                        onToggled: appSettings.screenshotCursor = checked
+                    }
+                }
+                SettingRow {
+                    label: qsTr("지연")
+                    description: qsTr("메뉴나 툴팁처럼 사라지는 화면을 찍을 때 씁니다.")
+                    ComboBox {
+                        width: 200
+                        readonly property var values: [0, 3, 5, 10]
+                        model: values.map(v => v === 0 ? qsTr("없음") : v + qsTr("초"))
+                        currentIndex: Math.max(0, values.indexOf(appSettings.screenshotDelay))
+                        onActivated: index => appSettings.screenshotDelay = values[index]
+                    }
+                }
+            }
+
+            Section {
                 title: qsTr("리플레이 버퍼")
                 SettingRow {
                     label: qsTr("보관할 길이")
@@ -416,6 +481,14 @@ Item {
                     HotkeyField {
                         sequence: appSettings.hotkeyPause
                         onEdited: s => appSettings.hotkeyPause = s
+                    }
+                }
+                SettingRow {
+                    label: qsTr("화면 캡처")
+                    error: hotkeys.screenshotError
+                    HotkeyField {
+                        sequence: appSettings.hotkeyScreenshot
+                        onEdited: s => appSettings.hotkeyScreenshot = s
                     }
                 }
                 SettingRow {

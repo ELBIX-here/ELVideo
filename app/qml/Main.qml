@@ -96,6 +96,50 @@ ApplicationWindow {
         id: regionSelector
         onFinished: accepted => root.showMain()
     }
+    ScreenshotOverlay {}
+
+    // Delayed screenshot countdown; excluded from capture like the other overlays.
+    Window {
+        id: countdownWindow
+        property int seconds: 0
+        visible: seconds > 0
+        width: 120
+        height: 120
+        x: Screen.virtualX + (Screen.width - width) / 2
+        y: Screen.virtualY + (Screen.height - height) / 2
+        flags: Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.Tool | Qt.WindowTransparentForInput
+        color: "transparent"
+        Component.onCompleted: desktop.excludeFromCapture(countdownWindow)
+        Rectangle {
+            anchors.fill: parent
+            radius: width / 2
+            color: Qt.rgba(0.086, 0.094, 0.122, 0.9)
+            border.color: Theme.accent
+            border.width: 3
+            Text {
+                anchors.centerIn: parent
+                text: countdownWindow.seconds
+                color: Theme.text
+                font.family: Theme.fontFamily
+                font.pixelSize: 52
+                font.weight: Font.DemiBold
+            }
+        }
+    }
+
+    Connections {
+        target: screenCapture
+        function onCountdown(seconds) { countdownWindow.seconds = seconds }
+        function onCaptured(path, width, height, copied) {
+            const size = width + "×" + height
+            const text = path.length === 0 ? qsTr("캡처를 클립보드에 복사했습니다 (%1).").arg(size)
+                       : copied ? qsTr("캡처를 저장하고 클립보드에 복사했습니다 (%1).").arg(size)
+                       : qsTr("캡처를 저장했습니다 (%1).").arg(size)
+            toast.showSaved(text, path, qsTr("열기"))
+        }
+        function onFailed(message) { toast.showError(message) }
+    }
+
     RegionFrame {
         region: root.recordingRegion
         visible: recorder.active && root.recordingRegion.width > 0
@@ -188,6 +232,12 @@ ApplicationWindow {
                 color: Theme.danger
                 font.family: Theme.fontFamily
                 font.pixelSize: 12
+            }
+            IconButton {
+                visible: desktop.hasPlayer()
+                glyph: Theme.iconPlay
+                tip: qsTr("동영상 열기 (ELVideo 플레이어)")
+                onClicked: desktop.openInPlayer()
             }
             IconButton {
                 glyph: root.showSettings ? Theme.iconBack : Theme.iconSettings

@@ -2,6 +2,8 @@
 
 Windows 화면 녹화기. WGC 캡처, D3D11 NV12 변환, Media Foundation 인코딩, Qt/QML UI로 구성합니다.
 
+라이선스: **GPL-3.0-or-later** ([LICENSE](LICENSE)). 동영상 플레이어가 쓰는 libmpv와 FFmpeg가 GPL이고, Qt는 LGPL-3.0입니다.
+
 ## 구조
 
 | 경로 | 내용 |
@@ -112,6 +114,40 @@ elvideo-cli webcams                                         :: 카메라 목록�
 
 A/V 싱크 확인: `scripts\test\sync_run.ps1`이 흰 화면 깜빡임과 1 kHz 비프음을 같은 시계로 내는 창을 띄워 녹화하고 `synccheck`를 돌립니다(이어폰/스피커에서 작은 비프음이 납니다).
 
+## 동영상 플레이어 (libmpv)
+
+- **준비**: `powershell -ExecutionPolicy Bypass -File scripts\get-libmpv.ps1`이 고정된 libmpv 빌드(shinchiro/mpv-winbuild-cmake `20261103`, x86-64 기본판, SHA-256 확인)를 `third_party\mpv`에 받습니다. MSVC용 import 라이브러리는 CMake가 DLL의 export 목록으로 만듭니다(`cmake/Libmpv.cmake`). libmpv가 없으면 플레이어 없이 빌드됩니다.
+- **실행**: 메인 창 위쪽의 재생 버튼, 녹화·리플레이 저장 알림의 "재생", 또는 `ELVideo.exe --player <파일>`.
+- **구조**: 플레이어는 별도 프로세스입니다. Qt Quick이 그래픽 API를 프로세스 단위로 정하므로, 녹화 앱은 D3D11 그대로 두고 플레이어 프로세스만 OpenGL로 돌려 mpv 렌더 API(`MpvItem`, QQuickFramebufferObject)로 그립니다. 플레이어가 죽어도 녹화에는 영향이 없습니다. 로그는 `elvideo-player.log`.
+- **기능**: 끌어다 놓기·파일 열기, 같은 폴더의 동영상 자동 재생목록(PgUp/PgDn), 이어 보기(마지막 위치 기억), 하드웨어 디코딩(D3D11VA, OpenGL 연동이 없으면 copy 방식), 정확한 탐색, 프레임 단위 이동, 배속 0.25~4배(음정 유지), A-B 구간 반복, 오디오·자막 트랙 선택, 외부 자막(같은 이름의 SRT/ASS/SMI 자동, 끌어다 놓기·메뉴로 추가), 자막·오디오 싱크, 볼륨 최대 150%, 현재 장면 저장(캡처 폴더), 항상 위, 전체 화면, 미디어 정보. 컨트롤은 재생 중 2.5초 뒤 숨고, 그동안 자막은 컨트롤 위로 올라갑니다.
+
+| 키 | 동작 | 키 | 동작 |
+|---|---|---|---|
+| Space / 클릭 | 재생·일시정지 | Enter / 더블클릭 | 전체 화면 |
+| ← → | 5초 이동 | Ctrl+← → | 30초 이동 |
+| ↑ ↓ / 휠 | 볼륨 | M | 음소거 |
+| . F / , D | 다음 / 이전 프레임 | C X Z | 배속 + / − / 원래대로 |
+| L | A-B 구간 반복 | S | 현재 장면 저장 |
+| < > | 자막 싱크 ∓0.1초 | [ ] | 오디오 싱크 ∓0.05초 |
+| I | 미디어 정보 | Ctrl+T | 항상 위 |
+| Ctrl+O | 파일 열기 | Home | 처음으로 |
+
+- **시험**: `scripts\test\player_test.ps1`(Debug 빌드). `ELV_PLAYER_IPC`로 mpv의 JSON IPC를 열어(Debug 전용, IPC는 임의 명령을 실행할 수 있음) 15개 항목을 확인합니다: 열기·길이, 트랙(자막 자동 로드), 폴더 재생목록, 하드웨어 디코딩, 정확한 탐색, 프레임 앞/뒤(정확히 1/60초), 배속·음정 유지, A-B 반복, 자막 싱크, 장면 저장, UI 버튼 2개(UI Automation), HEVC 다음 파일, 이어 보기.
+- **라이선스**: libmpv(와 그 안의 FFmpeg)는 GPL입니다. 플레이어를 포함한 ELVideo 배포본은 GPL 조건을 따릅니다.
+
+## 화면 캡처
+
+- **시작**: `Ctrl+Shift+F12`, 녹화 바의 카메라 버튼, 트레이 메뉴 "화면 캡처".
+- 모든 모니터를 먼저 원본 해상도로 찍어 두고(화면이 멈춘 상태), 그 위에 오버레이를 띄웁니다.
+  - **드래그**: 영역
+  - **클릭**: 마우스 아래 창. 창은 WGC로 따로 찍으므로 다른 창에 가려진 부분까지 온전히 나옵니다. 바탕 화면을 클릭하면 그 모니터를 찍습니다
+  - **툴바**: "이 모니터", "전체 화면"(모든 모니터를 실제 배치대로 이어 붙임), "취소"
+  - **Esc / 오른쪽 클릭**: 취소
+- 결과는 클립보드 복사와 파일 저장(기본 `사진\ELVideo\ELVideo_Capture_<날짜-시간>.png`, JPG 선택 가능). 저장 후 알림의 "열기 / 폴더에서 보기".
+- 설정: 클립보드 복사, 파일로 저장, 저장 폴더, 형식, 마우스 커서 포함, 지연(3/5/10초, 화면 가운데에 카운트다운).
+- ELVideo의 창과 오버레이는 캡처에 찍히지 않습니다.
+- 시험: `scripts\test\shot_test.ps1`(Debug 빌드). 영역과 창은 마우스 대신 Debug 전용 단축키(`Ctrl+Shift+F1/F2`)로 시험합니다. 사용 중인 PC에서 합성 마우스 입력은 실제 마우스와 섞이기 때문입니다.
+
 ## v2·v3 기능
 
 | 기능 | 앱에서 | 동작 방식 |
@@ -199,6 +235,7 @@ WGC 프레임(BGRA) ─▶ VideoConverter ─▶ 최신 NV12 텍스처 ─▶ Fr
 - **Intel Quick Sync + Media Foundation SinkWriter 핸들 누수**: Intel QSV 하드웨어 인코더로 녹화할 때마다 핸들 3개(Event, 레지스트리 Key, WaitCompletionPacket)가 남습니다. 엔진 코드 없이 MF SinkWriter만 만들었다 해제해도 재현되고(`leakcheck`의 `bare MF SinkWriter`), NVIDIA 인코더나 소프트웨어 인코더에서는 생기지 않습니다. 녹화 1,000번에 핸들 3,000개 수준이라 실사용에는 지장이 없습니다. 메모리·스레드·GPU 메모리는 늘지 않습니다(100회 반복에서 확인). 없애려면 SinkWriter 대신 인코더 MFT를 직접 구동해야 해서 보류했습니다.
 - **NVIDIA GPU의 HEVC**: Media Foundation이 NVIDIA/DX12 HEVC 하드웨어 인코더 대신 소프트웨어 HEVC(HEVCVideoExtension)를 고릅니다. 녹화는 되지만 CPU를 씁니다.
 - **실제 웹캠 미검증**: 카메라 경로(MJPEG/YUY2 → RGB32 변환 포함)는 이 PC에서 시험하지 못했습니다.
+- **플레이어 설치 크기**: `libmpv-2.dll`이 FFmpeg를 통째로 포함해 약 116 MB입니다(설치 파일 압축 후 약 30 MB 증가).
 - **리플레이 버퍼는 H.264만**: 조각난 MP4로 버퍼를 만드는데 MF가 HEVC/AV1을 fMP4로 쓰지 못합니다.
 - **오디오 장치 클럭 차이**: 장치의 실제 샘플 속도는 QPC와 아주 조금 다를 수 있습니다. 차이가 20 ms 쌓이면 그 자리에서 무음을 넣거나 잘라 맞추므로, 몇 분에 한 번 아주 짧은 끊김이 생길 수 있습니다(이 PC의 2분 녹화에서는 보정이 한 번도 일어나지 않음). 리샘플링으로 부드럽게 맞추는 것은 이후 과제입니다.
 - **캡처 아이템**: `GraphicsCaptureItem`을 만들 때마다 OS가 ALPC 포트를 하나 열고 프로세스가 끝날 때까지 유지합니다. 그래서 아이템을 소스별로 캐시해 재사용하고(창이 닫히거나 모니터가 빠지면 캐시에서 제거), 같은 소스를 반복 녹화해도 늘지 않습니다.

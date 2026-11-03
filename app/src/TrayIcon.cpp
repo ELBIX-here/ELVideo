@@ -56,6 +56,7 @@ TrayIcon::TrayIcon(RecorderModel& recorder, AppSettings& settings, Desktop& desk
     toggleAction_ = menu_.addAction(QString(), &recorder_, &RecorderModel::toggle);
     pauseAction_ = menu_.addAction(QString(), &recorder_, &RecorderModel::togglePause);
     replayAction_ = menu_.addAction(QString(), &recorder_, &RecorderModel::replayHotkey);
+    menu_.addAction(tr("화면 캡처"), this, &TrayIcon::screenshotRequested);
     menu_.addSeparator();
     menu_.addAction(tr("녹화 폴더 열기"), this,
                     [&settings, &desktop] { desktop.openFolder(settings.effectiveOutputDir()); });
