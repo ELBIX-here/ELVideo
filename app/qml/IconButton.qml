@@ -26,16 +26,16 @@ AbstractButton {
         opacity: control.enabled ? 1 : 0.35
     }
     background: Rectangle {
-        radius: control.round ? width / 2 : Theme.radius - 2
+        radius: control.round ? width / 2 : Theme.radius
         color: control.checkedLook ? Theme.accentSoft
              : control.down ? (control.onHud ? Qt.rgba(1, 1, 1, 0.16) : Theme.pressed)
              : control.hovered && control.enabled ? (control.onHud ? Theme.hudHover : Theme.surfaceHover)
              : "transparent"
         border.width: control.visualFocus ? 2 : 0
-        border.color: Theme.accent
+        border.color: Theme.accentFocus
         Behavior on color { ColorAnimation { duration: Theme.fast } }
     }
-    scale: down ? 0.94 : 1
+    scale: down ? Theme.pressScale : 1
     Behavior on scale { NumberAnimation { duration: Theme.fast; easing.type: Easing.OutCubic } }
 
     ToolTip.visible: hovered && tip.length > 0

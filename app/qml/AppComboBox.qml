@@ -1,6 +1,5 @@
 import QtQuick
 import QtQuick.Controls
-import QtQuick.Effects
 
 // Popup button: the current choice with an up/down chevron; the list opens as a
 // floating rounded panel with a check mark on the current item.
@@ -44,12 +43,15 @@ ComboBox {
     }
 
     background: Rectangle {
-        radius: Theme.radius - 2
+        radius: Theme.radius
         color: control.down ? Theme.pressed : control.hovered && Theme.dark ? Qt.lighter(Theme.control, 1.15) : Theme.control
         border.width: control.visualFocus ? 2 : 1
-        border.color: control.visualFocus ? Theme.accent : Theme.controlBorder
+        border.color: control.visualFocus ? Theme.accentFocus : Theme.controlBorder
         Behavior on color { ColorAnimation { duration: Theme.fast } }
     }
+
+    scale: down ? Theme.pressScale : 1
+    Behavior on scale { NumberAnimation { duration: Theme.fast; easing.type: Easing.OutCubic } }
 
     delegate: ItemDelegate {
         id: item
@@ -109,17 +111,9 @@ ComboBox {
         }
 
         background: Rectangle {
-            radius: Theme.radius
+            radius: Theme.radiusMd
             color: Theme.surfaceRaised
-            border.color: Theme.dark ? "#3A3A3C" : "#D8D8DD"
-            layer.enabled: true
-            layer.effect: MultiEffect {
-                shadowEnabled: true
-                shadowColor: Theme.shadow
-                shadowBlur: 0.8
-                shadowVerticalOffset: 4
-                autoPaddingEnabled: true
-            }
+            border.color: Theme.popupBorder
         }
     }
 }

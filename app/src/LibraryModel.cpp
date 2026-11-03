@@ -123,7 +123,9 @@ void LibraryModel::rebuildVisible() {
     visible_.clear();
     for (int i = 0; i < static_cast<int>(all_.size()); ++i) {
         const bool image = all_[i].kind == QLatin1String("image");
-        if (filter_ == QLatin1String("all") || (filter_ == QLatin1String("image")) == image) visible_.push_back(i);
+        if (filter_ != QLatin1String("all") && (filter_ == QLatin1String("image")) != image) continue;
+        if (!search_.isEmpty() && !all_[i].name.contains(search_, Qt::CaseInsensitive)) continue;
+        visible_.push_back(i);
     }
 }
 
@@ -134,6 +136,16 @@ void LibraryModel::setFilter(const QString& filter) {
     rebuildVisible();
     endResetModel();
     emit filterChanged();
+}
+
+void LibraryModel::setSearch(const QString& search) {
+    const QString trimmed = search.trimmed();
+    if (trimmed == search_) return;
+    beginResetModel();
+    search_ = trimmed;
+    rebuildVisible();
+    endResetModel();
+    emit searchChanged();
 }
 
 int LibraryModel::videoCount() const {

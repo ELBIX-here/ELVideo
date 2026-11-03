@@ -19,7 +19,7 @@ AbstractButton {
         radius: width / 2
         color: "transparent"
         border.width: 3
-        border.color: control.visualFocus ? Theme.accent
+        border.color: control.visualFocus ? Theme.accentFocus
                     : control.onHud ? Qt.rgba(1, 1, 1, 0.35) : Theme.dark ? "#5A5A5E" : "#D1D1D6"
         opacity: control.enabled ? 1 : 0.4
     }
@@ -37,6 +37,6 @@ AbstractButton {
             Behavior on color { ColorAnimation { duration: Theme.fast } }
         }
     }
-    scale: down ? 0.95 : 1
+    scale: down ? Theme.pressScale : 1
     Behavior on scale { NumberAnimation { duration: Theme.fast } }
 }

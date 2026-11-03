@@ -8,6 +8,8 @@ Item {
 
     // The user wants to drag a new region (Main hides itself and opens the overlay).
     signal regionRequested()
+    // Room under the content for the floating record bar.
+    property real bottomInset: 0
 
     ColumnLayout {
         anchors.fill: parent
@@ -46,33 +48,38 @@ Item {
         Item {
             Layout.fillWidth: true
             Layout.fillHeight: true
+            Layout.bottomMargin: picker.bottomInset
             visible: sources.regionMode
 
             Column {
                 anchors.centerIn: parent
                 spacing: 14
 
-                RoundedClip {
+                Item {
                     anchors.horizontalCenter: parent.horizontalCenter
                     width: 520
                     height: 300
-                    radius: Theme.cardRadius
-                    Rectangle { anchors.fill: parent; color: Theme.mediaBackground }
-                    Image {
-                        id: regionImage
+                    ProductShadow { anchors.fill: parent }
+                    RoundedClip {
                         anchors.fill: parent
-                        source: sources.regionThumbnail
-                        sourceSize: Qt.size(1040, 600)
-                        fillMode: Image.PreserveAspectFit
-                        cache: false
-                    }
-                    Text {
-                        anchors.centerIn: parent
-                        visible: regionImage.status !== Image.Ready
-                        text: regionImage.status === Image.Loading ? qsTr("불러오는 중…") : qsTr("미리보기 없음")
-                        color: Theme.textFaint
-                        font.family: Theme.fontFamily
-                        font.pixelSize: 12
+                        radius: Theme.radius
+                        Rectangle { anchors.fill: parent; color: Theme.mediaBackground }
+                        Image {
+                            id: regionImage
+                            anchors.fill: parent
+                            source: sources.regionThumbnail
+                            sourceSize: Qt.size(1040, 600)
+                            fillMode: Image.PreserveAspectFit
+                            cache: false
+                        }
+                        Text {
+                            anchors.centerIn: parent
+                            visible: regionImage.status !== Image.Ready
+                            text: regionImage.status === Image.Loading ? qsTr("불러오는 중…") : qsTr("미리보기 없음")
+                            color: Theme.textFaint
+                            font.family: Theme.fontFamily
+                            font.pixelSize: 12
+                        }
                     }
                 }
                 Text {
@@ -105,6 +112,7 @@ Item {
             Layout.fillWidth: true
             Layout.fillHeight: true
             clip: true
+            bottomMargin: picker.bottomInset
             model: sources
             boundsBehavior: Flickable.StopAtBounds
             ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }

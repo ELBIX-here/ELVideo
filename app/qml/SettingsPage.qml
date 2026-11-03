@@ -7,6 +7,9 @@ import QtQuick.Layouts
 Item {
     id: page
 
+    // Room under the content for the floating record bar.
+    property real bottomInset: 0
+
     // A titled group: small gray heading, then rows on one rounded panel.
     component Section: ColumnLayout {
         id: section
@@ -549,7 +552,7 @@ Item {
 
             Text {
                 Layout.alignment: Qt.AlignHCenter
-                Layout.bottomMargin: 8
+                Layout.bottomMargin: page.bottomInset
                 text: "ELVideo " + engineVersion + "  ·  " + desktop.nativePath(appSettings.filePath)
                 color: Theme.textFaint
                 font.family: Theme.fontFamily

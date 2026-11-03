@@ -1,7 +1,6 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
-import QtQuick.Effects
 
 // Notification banner above the record bar: "saved" with file actions, or an
 // error. Slides up and fades in; stays while the mouse is over it.
@@ -52,19 +51,11 @@ Rectangle {
     implicitHeight: row.implicitHeight + 20
     radius: Theme.cardRadius
     color: Theme.surfaceRaised
-    border.color: Theme.dark ? Theme.border : "transparent"
+    border.color: Theme.border
     opacity: shown ? 1 : 0
     visible: opacity > 0
     transform: Translate { y: toast.shown ? 0 : 10; Behavior on y { NumberAnimation { duration: Theme.normal; easing.type: Easing.OutCubic } } }
     Behavior on opacity { NumberAnimation { duration: Theme.normal } }
-    layer.enabled: !Theme.dark
-    layer.effect: MultiEffect {
-        shadowEnabled: true
-        shadowColor: Theme.shadow
-        shadowBlur: 0.8
-        shadowVerticalOffset: 2
-        autoPaddingEnabled: true
-    }
 
     Timer {
         id: hideTimer

@@ -49,7 +49,7 @@ AbstractButton {
         verticalAlignment: Text.AlignVCenter
     }
     background: Rectangle {
-        radius: Theme.radius - 2
+        radius: Theme.radius
         color: field.editing ? Theme.accentSoft : field.hovered && Theme.dark ? Qt.lighter(Theme.control, 1.15) : Theme.control
         border.width: field.editing ? 2 : 1
         border.color: field.editing ? Theme.accent : Theme.controlBorder

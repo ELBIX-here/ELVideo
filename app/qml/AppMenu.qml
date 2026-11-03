@@ -1,6 +1,5 @@
 import QtQuick
 import QtQuick.Controls
-import QtQuick.Effects
 
 // Context menu: a floating rounded panel; items highlight in blue. Use with AppMenuItem.
 Menu {
@@ -22,16 +21,8 @@ Menu {
 
     background: Rectangle {
         implicitWidth: 200
-        radius: Theme.radius
+        radius: Theme.radiusMd
         color: Theme.surfaceRaised
-        border.color: Theme.dark ? "#3A3A3C" : "#D8D8DD"
-        layer.enabled: true
-        layer.effect: MultiEffect {
-            shadowEnabled: true
-            shadowColor: Theme.shadow
-            shadowBlur: 0.8
-            shadowVerticalOffset: 4
-            autoPaddingEnabled: true
-        }
+        border.color: Theme.popupBorder
     }
 }

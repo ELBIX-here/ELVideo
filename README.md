@@ -238,15 +238,26 @@ WGC 프레임(BGRA) ─▶ VideoConverter ─▶ 최신 NV12 텍스처 ─▶ Fr
 
 ## 디자인
 
-- macOS/iOS 시스템 앱의 느낌을 따릅니다.
-  - 회색 계층의 배경과 카드, 얇은 구분선, 파란색 강조 하나
-  - 빨간 녹화 버튼: 링 안의 점이 녹화 중에는 둥근 사각형으로 바뀜
-  - 슬라이드되는 세그먼트 컨트롤, 그룹으로 묶은 설정 목록
-  - 화면 위에 뜨는 것(녹화 바, 캡처 툴바, 카운트다운, 플레이어 컨트롤)은 반투명한 어두운 HUD
-- **라이트/다크**: 설정 → 화면 모드 → 모양에서 시스템(기본) / 라이트 / 다크. 시스템을 고르면 Windows 설정을 바로 따라가고, 제목 표시줄도 함께 바뀝니다. 플레이어는 항상 다크입니다.
-- 색과 글꼴은 [Theme.qml](app/qml/Theme.qml) 한 곳에 있습니다. 글꼴은 Windows 11의 Segoe UI Variable(없으면 Segoe UI)이고, 시간은 고정폭 숫자(`tnum`)로 표시해 흔들리지 않습니다.
-- 공용 컨트롤: `AppButton`, `AppComboBox`, `AppSpinBox`, `AppSlider`, `ToggleSwitch`, `SegmentedControl`, `AppMenu`/`AppMenuItem`/`AppMenuSeparator`, `HudButton`, `RoundedClip`(둥근 모서리로 자르기).
-- 화면 점검: `scripts\test\ui_snap.ps1 <이름>`이 실행 중인 Debug 앱(`ELV_TEST_CAPTURABLE=1`)의 창을 `build\ui\<이름>.png`로 저장합니다.
+기준은 [DESIGN.md](DESIGN.md)입니다(`npx getdesign@latest add apple`로 받은 apple.com 분석). 마케팅 사이트 문서라서, 원칙은 따르고 크기는 데스크톱 앱에 맞게 줄였습니다.
+
+- **색**: 강조색은 Action Blue 하나뿐입니다(라이트 #0066CC, 다크 #2997FF, 포커스 #0071E3). 배경은 parchment #F5F5F7과 흰색, 다크에서는 #1D1D1F 위에 #272729·#2A2A2C 타일을 씁니다. 녹화 빨강은 따로 둡니다.
+- **그림자**: 시스템 전체에서 하나만 씁니다. 영상·캡처 썸네일처럼 바닥에 놓인 그림 아래에만 넣고(`ProductShadow`), 카드·버튼·바에는 쓰지 않습니다.
+- **층 구분**: 배경색 차이와 반투명 블러(`Frost`)로 구분합니다.
+  - 아래 녹화 바는 페이지 위에 떠 있고, 그 밑으로 스크롤되는 내용이 흐리게 비칩니다.
+  - 플레이어 컨트롤은 영상이 비치는 유리입니다.
+- **모양**: 모서리는 8px(작은 버튼·입력·그림), 11px(팝업·메뉴), 18px(카드·그룹·바), 알약형 네 가지만 씁니다.
+  - 주요 동작은 파란 알약, 보조 동작은 테두리 알약, 그 외는 작은 사각 버튼입니다.
+  - 누를 수 있는 것은 모두 0.95배로 줄어듭니다.
+- **글자**: 굵기는 400과 600만 씁니다. 17px 이상은 자간을 좁힙니다(`Theme.tracking`).
+  - 헤더에는 섹션 이름을 21px/600으로 표시합니다.
+  - 시간은 고정폭 숫자(`tnum`)로 표시합니다.
+- **라이브러리**: 스토어형 카드(18px, 얇은 테두리, 그림 8px)에 "재생 ›" 텍스트 링크가 붙고, 알약형 이름 검색이 있습니다. 비었을 때는 제목 한 줄과 알약 버튼 하나를 보여 줍니다.
+- **라이트/다크**: 설정 → 화면 모드 → 모양에서 시스템(기본) / 라이트 / 다크를 고릅니다. 시스템이면 Windows 설정을 바로 따라가고 제목 표시줄도 바뀝니다. 플레이어는 항상 다크입니다.
+- 색·모양·글자 값은 [Theme.qml](app/qml/Theme.qml) 한 곳에 있습니다. 공용 컨트롤은 다음과 같습니다.
+  - 버튼·입력: `AppButton`, `AppComboBox`, `AppSpinBox`, `AppSlider`, `ToggleSwitch`, `SegmentedControl`, `SearchField`
+  - 메뉴: `AppMenu`/`AppMenuItem`/`AppMenuSeparator`
+  - HUD와 효과: `HudButton`, `Frost`, `ProductShadow`, `RoundedClip`
+- **화면 점검**: `scripts\test\ui_snap.ps1 <이름>`이 실행 중인 Debug 앱(`ELV_TEST_CAPTURABLE=1`)의 창을 `build\ui\<이름>.png`로 저장합니다. 설치본이 실행 중이면 `ELV_TEST_INSTANCE=1`로 Debug 앱을 함께 띄웁니다(Debug 전용, 단축키는 설치본이 가짐).
 
 ## 아이콘과 스플래시
 

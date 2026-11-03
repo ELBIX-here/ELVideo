@@ -1,5 +1,4 @@
 import QtQuick
-import QtQuick.Effects
 
 // Startup splash: a quiet card with the app icon, whose reels wind film from
 // the upper to the lower reel and settle on the exact icon pose, and the name
@@ -37,22 +36,25 @@ Window {
     Item {
         id: card
         anchors.fill: parent
-        anchors.margins: 24  // room for the shadow
+        anchors.margins: 24
         opacity: 0
         scale: 0.96
         layer.enabled: true
-        layer.effect: MultiEffect {
-            shadowEnabled: true
-            shadowColor: Qt.rgba(0, 0, 0, Theme.dark ? 0.55 : 0.18)
-            shadowBlur: 1.0
-            shadowVerticalOffset: 8
-        }
 
         Rectangle {
             anchors.fill: parent
-            radius: 28
+            radius: Theme.cardRadius
             color: Theme.surface
-            border.color: Theme.dark ? Qt.rgba(1, 1, 1, 0.08) : Qt.rgba(0, 0, 0, 0.06)
+            border.color: Theme.border
+        }
+
+        ProductShadow {
+            x: logo.x + logo.width * 6 / 512
+            y: logo.y + logo.height * 6 / 512
+            width: logo.width * 500 / 512
+            height: logo.height * 500 / 512
+            radius: width * 112 / 512
+            color: "#16181F"
         }
 
         // The app icon, as on the desktop: the mark on its dark rounded square.
@@ -72,8 +74,9 @@ Window {
             text: "ELVideo"
             color: Theme.text
             font.family: Theme.displayFont
-            font.pixelSize: 28
+            font.pixelSize: Theme.largeTitle
             font.weight: Font.DemiBold
+            font.letterSpacing: Theme.tracking(Theme.largeTitle)
             opacity: 0
         }
         Text {

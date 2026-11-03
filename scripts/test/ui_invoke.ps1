@@ -2,7 +2,8 @@
 # Usage: ui_invoke.ps1 <name> [-List]
 param([string]$Name, [switch]$List)
 Add-Type -AssemblyName UIAutomationClient, UIAutomationTypes
-$p = Get-Process ELVideo -ErrorAction Stop | Select-Object -First 1
+# The build under test, not an installed copy that may be running too.
+$p = Get-Process ELVideo -ErrorAction Stop | Sort-Object { $_.Path -notlike 'C:\Projects\*' } | Select-Object -First 1
 $root = [System.Windows.Automation.AutomationElement]::RootElement
 $cond = New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::ProcessIdProperty, $p.Id)
 $wins = $root.FindAll([System.Windows.Automation.TreeScope]::Children, $cond)

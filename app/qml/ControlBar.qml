@@ -1,23 +1,20 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
-import QtQuick.Effects
 
-// Bottom bar of the main window: what will be recorded, record/pause, time and status.
-Rectangle {
+// Bottom bar of the main window: what will be recorded, record/pause, time and
+// status. Floats over the page on frosted glass (`frostSource` is the page stack).
+Item {
     id: bar
 
+    property Item frostSource
+
     implicitHeight: 84
-    color: Theme.surface
-    border.color: Theme.dark ? Theme.border : "transparent"
-    radius: Theme.barRadius
-    layer.enabled: !Theme.dark
-    layer.effect: MultiEffect {
-        shadowEnabled: true
-        shadowColor: Theme.shadow
-        shadowBlur: 0.9
-        shadowVerticalOffset: 3
-        autoPaddingEnabled: true
+
+    Frost {
+        anchors.fill: parent
+        source: bar.frostSource
+        radius: Theme.barRadius
     }
 
     readonly property bool active: recorder.active

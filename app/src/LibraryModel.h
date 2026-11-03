@@ -16,6 +16,7 @@ class AppSettings;
 class LibraryModel : public QAbstractListModel {
     Q_OBJECT
     Q_PROPERTY(QString filter READ filter WRITE setFilter NOTIFY filterChanged)  // all | video | image
+    Q_PROPERTY(QString search READ search WRITE setSearch NOTIFY searchChanged)  // part of the name
     Q_PROPERTY(int videoCount READ videoCount NOTIFY countsChanged)
     Q_PROPERTY(int imageCount READ imageCount NOTIFY countsChanged)
 
@@ -34,11 +35,14 @@ public:
 
     QString filter() const { return filter_; }
     void setFilter(const QString& filter);
+    QString search() const { return search_; }
+    void setSearch(const QString& search);
     int videoCount() const;
     int imageCount() const;
 
 signals:
     void filterChanged();
+    void searchChanged();
     void countsChanged();
 
 private:
@@ -59,6 +63,7 @@ private:
     std::vector<Item> all_;
     std::vector<int> visible_;
     QString filter_ = QStringLiteral("all");
+    QString search_;
     QFileSystemWatcher watcher_;
     QTimer refreshTimer_;  // coalesces folder change bursts
     int generation_ = 0;

@@ -78,7 +78,12 @@ public:
                     QMetaObject::invokeMethod(item.data(), &MpvItem::onRendererReady, Qt::QueuedConnection);
             }
         }
-        return QQuickFramebufferObject::Renderer::createFramebufferObject(size);
+        // No alpha channel: mpv leaves alpha at 0, which the window ignores but a
+        // capture of the item (the frosted controls blur it) would turn transparent.
+        QOpenGLFramebufferObjectFormat format;
+        format.setAttachment(QOpenGLFramebufferObject::CombinedDepthStencil);
+        format.setInternalTextureFormat(0x8051);  // GL_RGB8
+        return new QOpenGLFramebufferObject(size, format);
     }
 
     void render() override {

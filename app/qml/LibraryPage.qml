@@ -2,11 +2,16 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 
-// Recordings, replays and screenshots, newest first.
+// Recordings, replays and screenshots, newest first, as store-style cards:
+// white (dark: tile) card, hairline, 18 px corners, the picture inset at 8 px.
 Item {
     id: page
 
     signal message(string text)
+    // "Start recording" from the empty state.
+    signal recordRequested()
+    // Room under the content for the floating record bar.
+    property real bottomInset: 0
 
     function open(path, kind) {
         if (kind === "image") desktop.openFile(path)
@@ -33,6 +38,11 @@ Item {
                 onActivated: index => library.filter = keys[index]
             }
             Item { Layout.fillWidth: true }
+            SearchField {
+                placeholderText: qsTr("이름으로 찾기")
+                text: library.search
+                onTextEdited: library.search = text
+            }
             IconButton {
                 glyph: Theme.iconFolder
                 tip: qsTr("녹화 폴더 열기")
@@ -50,12 +60,13 @@ Item {
             Layout.fillWidth: true
             Layout.fillHeight: true
             clip: true
+            bottomMargin: page.bottomInset
             model: library
             boundsBehavior: Flickable.StopAtBounds
             ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
             readonly property int columns: Math.max(1, Math.floor(width / 230))
             cellWidth: Math.floor(width / columns)
-            cellHeight: Math.round((cellWidth - 28) * 9 / 16) + 66
+            cellHeight: Math.round((cellWidth - 36) * 9 / 16) + 96
 
             delegate: Item {
                 id: cell
@@ -72,28 +83,29 @@ Item {
                 AbstractButton {
                     id: card
                     anchors.fill: parent
-                    anchors.margins: 6
+                    anchors.margins: 8
                     hoverEnabled: true
                     Accessible.name: cell.name
+                    scale: down ? 0.98 : 1
+                    Behavior on scale { NumberAnimation { duration: Theme.fast; easing.type: Easing.OutCubic } }
                     onDoubleClicked: page.open(cell.path, cell.kind)
                     TapHandler {
                         acceptedButtons: Qt.RightButton
                         onTapped: itemMenu.popup()
                     }
                     background: Rectangle {
-                        radius: Theme.cardRadius + 2
-                        color: card.hovered ? Theme.surfaceHover : "transparent"
-                        border.width: card.visualFocus ? 2 : 0
-                        border.color: Theme.accent
-                        Behavior on color { ColorAnimation { duration: Theme.fast } }
+                        radius: Theme.cardRadius
+                        color: Theme.surface
+                        border.width: card.visualFocus ? 2 : 1
+                        border.color: card.visualFocus ? Theme.accentFocus : Theme.border
                     }
                     contentItem: Column {
-                        spacing: 4
-                        padding: 8
+                        spacing: 2
+                        padding: 10
                         RoundedClip {
-                            width: card.width - 16
+                            width: card.width - 20
                             height: Math.round(width * 9 / 16)
-                            radius: Theme.radius - 2
+                            radius: Theme.radius
                             Rectangle { anchors.fill: parent; color: Theme.mediaBackground }
                             Image {
                                 id: thumb
@@ -174,23 +186,33 @@ Item {
                                 }
                             }
                         }
-                        Item { width: 1; height: 4 }
+                        Item { width: 1; height: 6 }
                         Text {
-                            width: card.width - 16
+                            leftPadding: 2
+                            width: card.width - 20
                             text: cell.name
                             elide: Text.ElideMiddle
                             color: Theme.text
                             font.family: Theme.fontFamily
-                            font.pixelSize: 12
+                            font.pixelSize: Theme.body
                             font.weight: Font.DemiBold
                         }
                         Text {
-                            width: card.width - 16
+                            leftPadding: 2
+                            width: card.width - 20
                             text: cell.date + " · " + cell.size
                             elide: Text.ElideRight
                             color: Theme.textDim
                             font.family: Theme.fontFamily
-                            font.pixelSize: 11
+                            font.pixelSize: Theme.fine
+                        }
+                        Text {  // text link, the card's action
+                            leftPadding: 2
+                            topPadding: 4
+                            text: (cell.kind === "image" ? qsTr("열기") : qsTr("재생")) + " \u203A"
+                            color: Theme.accent
+                            font.family: Theme.fontFamily
+                            font.pixelSize: Theme.caption
                         }
                     }
                     onClicked: page.open(cell.path, cell.kind)
@@ -217,13 +239,36 @@ Item {
                 }
             }
 
-            Text {
+            // Empty state: a quiet headline and one pill action.
+            Column {
                 anchors.centerIn: parent
+                anchors.verticalCenterOffset: -page.bottomInset / 2
                 visible: grid.count === 0
-                text: qsTr("아직 녹화나 캡처가 없습니다")
-                color: Theme.textDim
-                font.family: Theme.fontFamily
-                font.pixelSize: 13
+                spacing: 10
+                Text {
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    text: library.search.length > 0 ? qsTr("찾는 항목이 없습니다") : qsTr("아직 녹화나 캡처가 없습니다")
+                    color: Theme.text
+                    font.family: Theme.displayFont
+                    font.pixelSize: Theme.tagline
+                    font.weight: Font.DemiBold
+                    font.letterSpacing: Theme.tracking(Theme.tagline)
+                }
+                Text {
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    text: library.search.length > 0 ? qsTr("다른 이름으로 찾아 보세요.")
+                                                    : qsTr("녹화한 동영상과 캡처한 화면이 여기에 모입니다.")
+                    color: Theme.textDim
+                    font.family: Theme.fontFamily
+                    font.pixelSize: Theme.body
+                }
+                AppButton {
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    visible: library.search.length === 0
+                    primary: true
+                    text: qsTr("녹화하러 가기")
+                    onClicked: page.recordRequested()
+                }
             }
         }
     }

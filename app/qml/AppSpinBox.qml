@@ -50,9 +50,9 @@ SpinBox {
     }
 
     background: Rectangle {
-        radius: Theme.radius - 2
+        radius: Theme.radius
         color: Theme.control
         border.width: control.activeFocus ? 2 : 1
-        border.color: control.activeFocus ? Theme.accent : Theme.controlBorder
+        border.color: control.activeFocus ? Theme.accentFocus : Theme.controlBorder
     }
 }

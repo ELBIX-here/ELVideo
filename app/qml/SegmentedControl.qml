@@ -1,7 +1,6 @@
 import QtQuick
-import QtQuick.Effects
 
-// Apple-style segmented control: a gray track with a raised thumb that slides
+// Segmented control: a gray pill track with a white (dark: gray) pill that slides
 // to the current segment. `segments` is a list of { text, count? }.
 Rectangle {
     id: root
@@ -12,7 +11,7 @@ Rectangle {
 
     implicitWidth: row.implicitWidth + 4
     implicitHeight: 32
-    radius: Theme.radius - 1
+    radius: height / 2
     color: Theme.fill
 
     Rectangle {
@@ -23,18 +22,12 @@ Rectangle {
         y: 2
         width: target ? target.width : 0
         height: root.height - 4
-        radius: Theme.radius - 3
+        radius: height / 2
         color: Theme.thumb
+        border.width: Theme.dark ? 0 : 1
+        border.color: Qt.rgba(0, 0, 0, 0.06)
         Behavior on x { NumberAnimation { duration: Theme.normal; easing.type: Easing.OutCubic } }
         Behavior on width { NumberAnimation { duration: Theme.normal; easing.type: Easing.OutCubic } }
-        layer.enabled: !Theme.dark
-        layer.effect: MultiEffect {
-            shadowEnabled: true
-            shadowColor: Qt.rgba(0, 0, 0, 0.12)
-            shadowBlur: 0.3
-            shadowVerticalOffset: 1
-            autoPaddingEnabled: true
-        }
     }
 
     Row {
@@ -48,7 +41,7 @@ Rectangle {
                 required property int index
                 required property var modelData
                 readonly property bool current: index === root.currentIndex
-                width: label.implicitWidth + 32
+                width: label.implicitWidth + 34
                 height: row.height
                 hoverEnabled: true
                 cursorShape: Qt.PointingHandCursor

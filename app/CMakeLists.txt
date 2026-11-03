@@ -89,6 +89,9 @@ qt_add_qml_module(elv_app
         qml/RoundedClip.qml
         qml/HudButton.qml
         qml/AppMenuSeparator.qml
+        qml/ProductShadow.qml
+        qml/Frost.qml
+        qml/SearchField.qml
         ${ELV_PLAYER_QML}
 )
 

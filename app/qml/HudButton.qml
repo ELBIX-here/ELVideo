@@ -38,4 +38,6 @@ AbstractButton {
         color: control.down ? Qt.rgba(1, 1, 1, 0.18) : control.hovered ? Theme.hudHover : "transparent"
         Behavior on color { ColorAnimation { duration: Theme.fast } }
     }
+    scale: down ? Theme.pressScale : 1
+    Behavior on scale { NumberAnimation { duration: Theme.fast; easing.type: Easing.OutCubic } }
 }

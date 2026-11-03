@@ -28,7 +28,7 @@ ApplicationWindow {
     palette.midlight: Theme.surfaceHover
     palette.mid: Theme.border
     palette.dark: Theme.textFaint
-    palette.shadow: Theme.shadow
+    palette.shadow: "#000000"
     palette.toolTipBase: Theme.surfaceRaised
     palette.toolTipText: Theme.text
     palette.placeholderText: Theme.textFaint
@@ -212,34 +212,23 @@ ApplicationWindow {
         anchors.topMargin: 16
         spacing: 16
 
-        // Header: app mark and title on the left, the page's toolbar buttons on the right.
+        // Header (the "sub-nav"): app mark and the section name on the left, the
+        // section's utility buttons on the right. Flat on the window background.
         RowLayout {
             Layout.fillWidth: true
-            spacing: 10
+            spacing: 12
             LogoMark {
-                Layout.preferredWidth: 30
-                Layout.preferredHeight: 30
+                Layout.preferredWidth: 28
+                Layout.preferredHeight: 28
             }
             Text {
-                text: "ELVideo"
+                text: recorder.replayMode ? qsTr("리플레이 버퍼") : recorder.active ? qsTr("녹화 중")
+                    : root.showLibrary ? qsTr("라이브러리") : root.showSettings ? qsTr("설정") : qsTr("화면 녹화")
                 color: Theme.text
                 font.family: Theme.displayFont
-                font.pixelSize: 19
+                font.pixelSize: Theme.tagline
                 font.weight: Font.DemiBold
-            }
-            Rectangle {
-                Layout.leftMargin: 2
-                Layout.preferredWidth: 1
-                Layout.preferredHeight: 16
-                color: Theme.separator
-            }
-            Text {
-                Layout.leftMargin: 2
-                text: recorder.replayMode ? qsTr("리플레이 버퍼") : recorder.active ? qsTr("녹화 중")
-                    : root.showLibrary ? qsTr("라이브러리") : root.showSettings ? qsTr("설정") : qsTr("녹화할 화면을 고르세요")
-                color: Theme.textDim
-                font.family: Theme.fontFamily
-                font.pixelSize: 13
+                font.letterSpacing: Theme.tracking(Theme.tagline)
             }
             Item { Layout.fillWidth: true }
             Text {
@@ -275,10 +264,17 @@ ApplicationWindow {
             }
         }
 
-        StackLayout {
-            id: pages
+        // Pages fill the rest and scroll under the floating record bar, which shows
+        // them blurred through its frosted glass.
+        Item {
+            id: body
             Layout.fillWidth: true
             Layout.fillHeight: true
+            readonly property real barInset: controlBar.height + 16
+
+        StackLayout {
+            id: pages
+            anchors.fill: parent
             currentIndex: recorder.active ? 2 : root.showLibrary ? 3 : root.showSettings ? 1 : 0
             // Pages cross-fade in with a slight rise.
             onCurrentIndexChanged: pageIn.restart()
@@ -289,22 +285,33 @@ ApplicationWindow {
             }
             transform: Translate { id: pageShift }
             SourcePicker {
+                bottomInset: body.barInset
                 onRegionRequested: root.selectRegion()
             }
-            SettingsPage {}
-            PreviewPanel {}
+            SettingsPage { bottomInset: body.barInset }
+            PreviewPanel { bottomInset: body.barInset }
             LibraryPage {
+                bottomInset: body.barInset
                 onMessage: text => toast.showSaved(text, "")
+                onRecordRequested: root.showLibrary = false
             }
         }
 
         Toast {
             id: toast
-            Layout.fillWidth: true
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.bottom: controlBar.top
+            anchors.bottomMargin: 10
         }
 
         ControlBar {
-            Layout.fillWidth: true
+            id: controlBar
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.bottom: parent.bottom
+            frostSource: pages
+        }
         }
     }
 }

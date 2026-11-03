@@ -1,8 +1,8 @@
 import QtQuick
 import QtQuick.Controls
 
-// One monitor or window in the picker: the thumbnail with rounded corners, the
-// title below it, and a blue ring around the thumbnail when selected.
+// One monitor or window in the picker: the thumbnail resting on the page with
+// the product shadow, the title below it, and a blue ring when selected.
 AbstractButton {
     id: card
 
@@ -16,10 +16,10 @@ AbstractButton {
     Accessible.name: title
 
     background: Rectangle {
-        radius: Theme.cardRadius + 2
+        radius: Theme.cardRadius
         color: card.hovered && !card.selected ? Theme.surfaceHover : "transparent"
         border.width: card.visualFocus ? 2 : 0
-        border.color: Theme.accent
+        border.color: Theme.accentFocus
         Behavior on color { ColorAnimation { duration: Theme.fast } }
     }
 
@@ -36,20 +36,21 @@ AbstractButton {
             Rectangle {
                 anchors.fill: parent
                 anchors.margins: -4
-                radius: Theme.cardRadius
+                radius: Theme.radius + 4
                 color: "transparent"
-                border.width: 3
-                border.color: Theme.accent
+                border.width: 2
+                border.color: Theme.accentFocus
                 opacity: card.selected ? 1 : 0
                 scale: card.selected ? 1 : 1.03
                 Behavior on opacity { NumberAnimation { duration: Theme.fast } }
                 Behavior on scale { NumberAnimation { duration: Theme.normal; easing.type: Easing.OutCubic } }
             }
 
+            ProductShadow { anchors.fill: parent }
             RoundedClip {
                 id: frame
                 anchors.fill: parent
-                radius: Theme.radius - 2
+                radius: Theme.radius
 
                 Rectangle { anchors.fill: parent; color: Theme.mediaBackground }
 

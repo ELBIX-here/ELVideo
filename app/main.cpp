@@ -71,7 +71,13 @@ int main(int argc, char* argv[]) {
     }
 
     // One instance owns the hotkeys and the tray icon; a second launch shows the first.
-    const HANDLE instanceMutex = CreateMutexW(nullptr, FALSE, L"Local\\ELVideo.SingleInstance");
+    const wchar_t* instanceName = L"Local\\ELVideo.SingleInstance";
+#ifndef NDEBUG
+    // Test hook: ELV_TEST_INSTANCE=1 runs a debug build beside an installed copy
+    // (its hotkeys then fail to register; the installed copy keeps them).
+    if (qEnvironmentVariableIntValue("ELV_TEST_INSTANCE")) instanceName = L"Local\\ELVideo.SingleInstance.Test";
+#endif
+    const HANDLE instanceMutex = CreateMutexW(nullptr, FALSE, instanceName);
     if (instanceMutex && GetLastError() == ERROR_ALREADY_EXISTS) {
         Hotkeys::activateRunningInstance();
         return 0;

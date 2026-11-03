@@ -304,14 +304,23 @@ ApplicationWindow {
         anchors.bottomMargin: win.fullscreen ? 28 : 16
         width: Math.min(parent.width - 32, 980)
         height: 86
-        radius: Theme.barRadius + 2
-        color: Theme.hud
-        border.color: Qt.rgba(1, 1, 1, 0.08)
+        radius: Theme.barRadius
+        color: "transparent"
         opacity: !win.mini && (win.controlsShown || player.paused || player.idle) ? 1 : 0
         visible: opacity > 0
         transform: Translate { y: controls.opacity < 1 ? 8 * (1 - controls.opacity) : 0 }
         Behavior on opacity { NumberAnimation { duration: Theme.normal; easing.type: Easing.OutCubic } }
-        // No layer (and so no drop shadow): the seek preview pops out above the bar.
+        // Frosted glass over the video, as in the system player. No layer on this
+        // item: the seek preview pops out above the bar.
+        Frost {
+            anchors.fill: parent
+            source: player
+            radius: controls.radius
+            tint: Qt.rgba(0.11, 0.11, 0.12, 0.55)
+            base: "black"
+            flipSource: true
+            borderColor: Qt.rgba(1, 1, 1, 0.10)
+        }
         HoverHandler { id: controlsHover }
         // Lift subtitles above the controls while they show (mpv units: 720-line scale).
         function liftSubtitles() {

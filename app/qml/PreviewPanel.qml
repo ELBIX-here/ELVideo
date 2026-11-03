@@ -6,6 +6,9 @@ import QtQuick.Layouts
 Item {
     id: panel
 
+    // Room under the content for the floating record bar.
+    property real bottomInset: 0
+
     property int frameNo: 0
     // Only while the window is actually on screen (hidden while recording by default).
     readonly property bool running: visible && recorder.active && Window.window !== null && Window.window.visible
@@ -19,11 +22,15 @@ Item {
         onTriggered: if (image.status !== Image.Loading) panel.frameNo++
     }
 
+    ProductShadow {
+        anchors.fill: frame
+        radius: Theme.radius
+    }
     // Red (paused: orange) ring around the picture.
     Rectangle {
         anchors.fill: frame
-        anchors.margins: -4
-        radius: Theme.cardRadius + 2
+        anchors.margins: -5
+        radius: Theme.radius + 5
         color: "transparent"
         border.width: 3
         border.color: recorder.paused ? Theme.warning : Theme.record
@@ -33,10 +40,10 @@ Item {
         id: frame
         anchors.centerIn: parent
         readonly property real aspect: image.implicitWidth > 0 ? image.implicitWidth / image.implicitHeight : 16 / 9
-        width: Math.min(parent.width, (parent.height - caption.height - 12) * aspect)
+        width: Math.min(parent.width - 16, (parent.height - panel.bottomInset - caption.height - 24) * aspect)
         height: width / aspect
-        anchors.verticalCenterOffset: -(caption.height + 12) / 2
-        radius: Theme.cardRadius - 2
+        anchors.verticalCenterOffset: -(caption.height + 12 + panel.bottomInset) / 2
+        radius: Theme.radius
 
         Rectangle { anchors.fill: parent; color: Theme.mediaBackground }
         Image {
