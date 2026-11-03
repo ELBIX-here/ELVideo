@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="background">#F5F5F7</color>
+    <color name="splash">#1D1D1F</color>
+    <color name="icon_tile">#1D1D1F</color>
+</resources>

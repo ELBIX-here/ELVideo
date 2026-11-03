@@ -13,6 +13,7 @@ Windows 화면 녹화기. WGC 캡처, D3D11 NV12 변환, Media Foundation 인코
 | `app/` | Qt 6 QML 앱 (`ELVideo.exe`) |
 | `tests/` | 단위 테스트 (`ELV_BUILD_TESTS=ON`, 아직 없음) |
 | `installer/` | Inno Setup 스크립트 (`ELVideo.iss`) |
+| `android/` | 안드로이드 앱 (동영상 플레이어 전용, Kotlin·Jetpack Compose·Media3). 아래 "안드로이드 앱" |
 | `scripts/test/` | 앱 UI 자동 점검(UI Automation, 단축키 입력, 창 스크린샷)과 A/V 싱크 자극·측정 스크립트 |
 
 ## 필요 도구
@@ -266,6 +267,40 @@ WGC 프레임(BGRA) ─▶ VideoConverter ─▶ 최신 NV12 텍스처 ─▶ Fr
 - **출력 크기**는 녹화 시작 시 소스 크기(짝수로 내림)로 고정됩니다. 도중에 창 크기가 바뀌면 비율을 유지한 채 레터박스로 들어갑니다.
 - **인코더**: 하드웨어 MFT에는 GPU 표면을 그대로 넘깁니다. 하드웨어 인코더가 없거나 `--software`일 때는 NV12를 CPU로 읽어 와서 소프트웨어 인코더에 넘깁니다(GPU 표면을 소프트웨어 인코더에 넘기면 내부 동기화 때문에 프레임이 밀립니다).
 - **GPU가 여러 개인 시스템**: 캡처 대상 모니터를 구동하는 어댑터에서 디바이스와 인코더를 만듭니다(예: 모니터 1은 Intel QSV, 모니터 2는 NVIDIA).
+
+## 안드로이드 앱
+
+`android/`는 휴대폰·태블릿·폴더블용 **동영상 플레이어**입니다. 녹화 기능은 없습니다. 디자인 규칙(DESIGN.md)과 진행 기록 방식은 데스크톱과 같습니다.
+
+- **구성**
+  - 휴대폰: 아래 탭 "이어서 보기 · 폴더 · 설정".
+  - 폭 600dp 이상(태블릿, 펼친 폴더블): 데스크톱과 같은 왼쪽 사이드바.
+- **폴더**
+  - 시스템 문서 선택기로 휴대폰, SD 카드, USB의 폴더를 등록합니다. 앱은 그 폴더를 계속 읽을 권한만 가집니다.
+  - 하위 폴더 타일(진행 막대), 번호 순서 정렬(2강 → 10강), 다 봄 표시, 강의 찾기, "이어서 재생"은 데스크톱과 같습니다.
+  - 강의 길이는 파일 머리에서 읽습니다. 조각난 MP4(화면 녹화기가 쓰는 형식)는 Android가 0을 돌려주므로 `mvhd`를 직접 읽습니다.
+- **플레이어** (Media3 ExoPlayer)
+  - 폴더의 강의가 재생목록이 됩니다. 다음 강의 자동 재생을 지원하고, 같은 이름의 `.srt`/`.vtt` 자막을 함께 엽니다.
+  - 멈춘 곳부터 이어 보기를 지원하고, "처음부터" 안내가 함께 나옵니다.
+  - 두 번 탭으로 ±5/10/30초 이동, 가로로 밀어 탐색, 왼쪽·오른쪽 세로로 밀어 밝기·볼륨, 길게 눌러 2배속.
+  - 속도 0.5–2×, 작은 화면(PiP), 화면 회전.
+  - 컨트롤은 3초 뒤 숨습니다.
+- **폴더블** (Jetpack WindowManager)
+  - 반쯤 접어 세운 테이블탑: 위 화면은 영상, 아래 화면은 컨트롤과 재생목록.
+  - 책처럼 세운 자세: 한쪽에 영상, 다른 쪽에 재생목록. 접는 선 위에는 아무것도 두지 않습니다.
+  - 접기·펴기·회전에도 액티비티를 다시 만들지 않아 재생이 끊기지 않습니다.
+- **진행 기록**: 앱 저장소의 `progress.json`. 5초마다, 그리고 일시정지·강의 전환·종료 때 씁니다. 다 봄 기준은 데스크톱과 같습니다.
+- **Google Drive**: 아직 없습니다. Drive API 연동은 OAuth 클라이언트를 발급받은 뒤 추가합니다.
+
+빌드(JDK 17, Android SDK 37, Gradle은 래퍼가 받음):
+
+```
+cd android
+gradlew.bat assembleDebug      # app/build/outputs/apk/debug/app-debug.apk
+gradlew.bat assembleRelease    # android/keystore.properties가 있으면 서명
+```
+
+`keystore.properties`(git 제외)에는 `storeFile`, `storePassword`, `keyAlias`, `keyPassword`를 적습니다. 최소 Android 10(API 29)입니다.
 
 ## 디자인
 
