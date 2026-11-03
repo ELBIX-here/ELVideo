@@ -1,0 +1,34 @@
+#include <winver.h>
+
+#include "elv_version.h"
+
+// Qt uses IDI_ICON1 as the default window icon; Explorer and the taskbar use the first icon.
+IDI_ICON1 ICON "elvideo.ico"
+
+VS_VERSION_INFO VERSIONINFO
+FILEVERSION ELV_VERSION_MAJOR, ELV_VERSION_MINOR, ELV_VERSION_PATCH, 0
+PRODUCTVERSION ELV_VERSION_MAJOR, ELV_VERSION_MINOR, ELV_VERSION_PATCH, 0
+FILEFLAGSMASK VS_FFI_FILEFLAGSMASK
+FILEFLAGS 0
+FILEOS VOS_NT_WINDOWS32
+FILETYPE VFT_APP
+FILESUBTYPE 0
+BEGIN
+    BLOCK "StringFileInfo"
+    BEGIN
+        BLOCK "040904B0"
+        BEGIN
+            VALUE "CompanyName", "ELVideo"
+            VALUE "FileDescription", "ELVideo screen recorder"
+            VALUE "FileVersion", ELV_VERSION_STRING
+            VALUE "InternalName", "ELVideo"
+            VALUE "OriginalFilename", "ELVideo.exe"
+            VALUE "ProductName", "ELVideo"
+            VALUE "ProductVersion", ELV_VERSION_STRING
+        END
+    END
+    BLOCK "VarFileInfo"
+    BEGIN
+        VALUE "Translation", 0x0409, 1200
+    END
+END
