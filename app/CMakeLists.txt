@@ -98,7 +98,10 @@ qt_add_qml_module(elv_app
 qt_add_resources(elv_app "icons"
     PREFIX "/"
     BASE resources
-    FILES resources/elvideo.ico)
+    FILES resources/elvideo.ico
+          resources/fonts/Pretendard-Light.otf
+          resources/fonts/Pretendard-Regular.otf
+          resources/fonts/Pretendard-SemiBold.otf)
 
 # qmlcachegen's ahead-of-time compiled QML (.rcc/qmlcache/*.cpp) trips C4702
 # (unreachable code) inside Qt headers under /W4.

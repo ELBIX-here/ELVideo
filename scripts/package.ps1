@@ -29,6 +29,7 @@ New-Item -ItemType Directory -Force $stage | Out-Null
 Copy-Item (Join-Path $build "app\ELVideo.exe") $stage
 Copy-Item (Join-Path $build "app\*.dll") $stage  # vcpkg libraries (spdlog, fmt) and libmpv
 Copy-Item (Join-Path $root "LICENSE") (Join-Path $stage "LICENSE.txt")  # GPL-3.0: ships with the binaries
+Copy-Item (Join-Path $root "app\resources\fonts\OFL.txt") (Join-Path $stage "Pretendard-OFL.txt")  # the bundled font's license
 
 # Qt libraries, plugins and the QML modules the app imports.
 & (Join-Path $qtDir "bin\windeployqt.exe") --release --qmldir (Join-Path $root "app\qml") --no-translations `

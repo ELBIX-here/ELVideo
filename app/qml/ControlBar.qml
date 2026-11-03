@@ -3,19 +3,11 @@ import QtQuick.Controls
 import QtQuick.Layouts
 
 // Bottom bar of the main window: what will be recorded, record/pause, time and
-// status. Floats over the page on frosted glass (`frostSource` is the page stack).
+// status. Transparent: Main puts a Frost of the page stack under it.
 Item {
     id: bar
 
-    property Item frostSource
-
     implicitHeight: 84
-
-    Frost {
-        anchors.fill: parent
-        source: bar.frostSource
-        radius: Theme.barRadius
-    }
 
     readonly property bool active: recorder.active
     readonly property bool replay: recorder.replayMode

@@ -7,6 +7,7 @@
 #include "AppSettings.h"
 #include "player/SeekThumbnailer.h"
 #include "Desktop.h"
+#include "Fonts.h"
 #include "core/IRecorder.h"
 
 #include <QApplication>
@@ -30,6 +31,7 @@ int runPlayer(int argc, char* argv[]) {
     QApplication::setApplicationName(QStringLiteral("ELVideo"));
     QApplication::setApplicationVersion(QString::fromLatin1(elv::version()));
     QApplication::setWindowIcon(QIcon(QStringLiteral(":/elvideo.ico")));
+    loadAppFonts();
     QQuickStyle::setStyle(QStringLiteral("Basic"));
     std::setlocale(LC_NUMERIC, "C");  // libmpv refuses to start otherwise; Qt set it from the system
 

@@ -56,10 +56,11 @@ QtObject {
     readonly property color hudTextDim: "#A1A1A6"
     readonly property color hudHover: Qt.rgba(1, 1, 1, 0.10)
 
-    readonly property string fontFamily: Qt.fontFamilies().indexOf("Segoe UI Variable Text") >= 0
-                                         ? "Segoe UI Variable Text" : "Segoe UI"
-    readonly property string displayFont: Qt.fontFamilies().indexOf("Segoe UI Variable Display") >= 0
-                                          ? "Segoe UI Variable Display" : "Segoe UI"
+    // Pretendard (bundled, SIL OFL): Inter's Latin, which DESIGN.md names as the
+    // closest open stand-in for SF Pro, with matching Hangul. Segoe UI if it is missing.
+    readonly property bool hasPretendard: Qt.fontFamilies().indexOf("Pretendard") >= 0
+    readonly property string fontFamily: hasPretendard ? "Pretendard" : "Segoe UI"
+    readonly property string displayFont: fontFamily
     readonly property string iconFont: Qt.fontFamilies().indexOf("Segoe Fluent Icons") >= 0
                                         ? "Segoe Fluent Icons" : "Segoe MDL2 Assets"
     readonly property string monoFont: "Cascadia Mono, Consolas"

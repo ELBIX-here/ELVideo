@@ -2,6 +2,7 @@
 #include "src/AppSettings.h"
 #include "src/CrashHandler.h"
 #include "src/Desktop.h"
+#include "src/Fonts.h"
 #include "src/Hotkeys.h"
 #include "src/LibraryModel.h"
 #include "src/RecorderModel.h"
@@ -87,6 +88,7 @@ int main(int argc, char* argv[]) {
     QApplication::setApplicationName(QStringLiteral("ELVideo"));
     QApplication::setApplicationVersion(QString::fromLatin1(elv::version()));
     QApplication::setWindowIcon(QIcon(QStringLiteral(":/elvideo.ico")));
+    loadAppFonts();
     QApplication::setQuitOnLastWindowClosed(false);  // the tray keeps running
     QQuickStyle::setStyle(QStringLiteral("Basic"));
 

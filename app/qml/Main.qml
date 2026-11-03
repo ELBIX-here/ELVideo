@@ -305,12 +305,20 @@ ApplicationWindow {
             anchors.bottomMargin: 10
         }
 
+        // The record bar's frosted glass, next to the pages it blurs.
+        Frost {
+            x: controlBar.x
+            y: controlBar.y
+            width: controlBar.width
+            height: controlBar.height
+            source: pages
+            radius: Theme.barRadius
+        }
         ControlBar {
             id: controlBar
             anchors.left: parent.left
             anchors.right: parent.right
             anchors.bottom: parent.bottom
-            frostSource: pages
         }
         }
     }

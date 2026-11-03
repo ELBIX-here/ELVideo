@@ -177,10 +177,22 @@ ApplicationWindow {
         onFileChanged: if (path.length === 0) seekThumbs.setFile("", 0, 0)
     }
 
+    // Hides the controls 2.5 s after the last mouse move. While something keeps
+    // them up (paused, nothing loaded, mouse on the bar, a menu open) it checks
+    // again later instead of giving up, so they still go away afterwards.
     Timer {
         id: hideTimer
         interval: 2500
-        onTriggered: if (!player.paused && !player.idle && !controlsHover.hovered) win.controlsShown = false
+        onTriggered: {
+            if (player.paused || player.idle || controlsHover.hovered || win.menuOpen) restart()
+            else win.controlsShown = false
+        }
+    }
+    readonly property bool menuOpen: speedMenu.opened || subMenu.opened || audioMenu.opened || chapterMenu.opened
+                                     || pictureMenu.opened || contextMenu.opened
+    Connections {
+        target: player
+        function onPausedChanged() { if (!player.paused) hideTimer.restart() }
     }
 
     // Mouse on the video: click pauses, double-click toggles full screen, wheel = volume.
@@ -190,6 +202,8 @@ ApplicationWindow {
         acceptedButtons: Qt.LeftButton | Qt.RightButton
         cursorShape: win.controlsShown || !win.fullscreen ? Qt.ArrowCursor : Qt.BlankCursor
         onPositionChanged: win.showControls()
+        // Leaving the window (to another monitor, say) hides them soon too.
+        onExited: hideTimer.restart()
         onClicked: mouse => {
             if (mouse.button === Qt.RightButton) contextMenu.popup()
             else if (!player.idle) player.togglePause()
@@ -296,6 +310,21 @@ ApplicationWindow {
         }
     }
 
+    // Frosted glass over the video under the controls, as in the system player.
+    Frost {
+        x: controls.x
+        y: controls.y + controlsShift.y
+        width: controls.width
+        height: controls.height
+        visible: controls.visible
+        opacity: controls.opacity
+        source: player
+        radius: controls.radius
+        tint: Qt.rgba(0.11, 0.11, 0.12, 0.55)
+        base: "black"
+        borderColor: Qt.rgba(1, 1, 1, 0.10)
+    }
+
     // Controls.
     Rectangle {
         id: controls
@@ -308,19 +337,9 @@ ApplicationWindow {
         color: "transparent"
         opacity: !win.mini && (win.controlsShown || player.paused || player.idle) ? 1 : 0
         visible: opacity > 0
-        transform: Translate { y: controls.opacity < 1 ? 8 * (1 - controls.opacity) : 0 }
+        transform: Translate { id: controlsShift; y: controls.opacity < 1 ? 8 * (1 - controls.opacity) : 0 }
         Behavior on opacity { NumberAnimation { duration: Theme.normal; easing.type: Easing.OutCubic } }
-        // Frosted glass over the video, as in the system player. No layer on this
-        // item: the seek preview pops out above the bar.
-        Frost {
-            anchors.fill: parent
-            source: player
-            radius: controls.radius
-            tint: Qt.rgba(0.11, 0.11, 0.12, 0.55)
-            base: "black"
-            flipSource: true
-            borderColor: Qt.rgba(1, 1, 1, 0.10)
-        }
+        // No layer on this item: the seek preview pops out above the bar.
         HoverHandler { id: controlsHover }
         // Lift subtitles above the controls while they show (mpv units: 720-line scale).
         function liftSubtitles() {
