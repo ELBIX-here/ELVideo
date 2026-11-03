@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.25)
 
-project(ELVideo VERSION 0.3.0 LANGUAGES CXX)
+project(ELVideo VERSION 0.4.0 LANGUAGES CXX)
 
 if(NOT WIN32 OR NOT MSVC)
     message(FATAL_ERROR "ELVideo requires Windows and MSVC.")

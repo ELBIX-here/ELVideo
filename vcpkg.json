@@ -1,6 +1,6 @@
 {
   "name": "elvideo",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Windows screen recorder (WGC + Media Foundation + Qt/QML)",
   "dependencies": [
     "spdlog",
