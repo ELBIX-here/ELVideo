@@ -9,76 +9,29 @@ Item {
     // The user wants to drag a new region (Main hides itself and opens the overlay).
     signal regionRequested()
 
-    component Segment: AbstractButton {
-        id: seg
-        property bool current
-        property int count
-        property bool showCount: true
-        hoverEnabled: true
-        implicitHeight: 32
-        implicitWidth: label.implicitWidth + 28
-        contentItem: Text {
-            id: label
-            text: seg.showCount ? seg.text + "  " + seg.count : seg.text
-            color: seg.current ? Theme.background : seg.hovered ? Theme.text : Theme.textDim
-            font.family: Theme.fontFamily
-            font.pixelSize: 13
-            font.weight: Font.DemiBold
-            horizontalAlignment: Text.AlignHCenter
-            verticalAlignment: Text.AlignVCenter
-        }
-        background: Rectangle {
-            radius: 8
-            color: seg.current ? Theme.accent : "transparent"
-            Behavior on color { ColorAnimation { duration: 120 } }
-        }
-    }
-
     ColumnLayout {
         anchors.fill: parent
-        spacing: 12
+        spacing: 14
 
         RowLayout {
             Layout.fillWidth: true
             spacing: 8
 
-            Rectangle {
-                implicitWidth: segments.implicitWidth + 8
-                implicitHeight: 40
-                radius: 10
-                color: Theme.surface
-                border.color: Theme.border
-                Row {
-                    id: segments
-                    anchors.centerIn: parent
-                    spacing: 4
-                    Segment {
-                        text: qsTr("디스플레이")
-                        count: sources.monitorCount
-                        current: !sources.regionMode && !sources.showWindows
-                        onClicked: {
-                            sources.regionMode = false
-                            sources.showWindows = false
-                        }
+            SegmentedControl {
+                segments: [
+                    { text: qsTr("디스플레이"), count: sources.monitorCount },
+                    { text: qsTr("창"), count: sources.windowCount },
+                    { text: qsTr("영역") }
+                ]
+                currentIndex: sources.regionMode ? 2 : sources.showWindows ? 1 : 0
+                onActivated: index => {
+                    if (index === 2) {
+                        if (sources.hasRegion) sources.regionMode = true
+                        else picker.regionRequested()
+                        return
                     }
-                    Segment {
-                        text: qsTr("창")
-                        count: sources.windowCount
-                        current: !sources.regionMode && sources.showWindows
-                        onClicked: {
-                            sources.regionMode = false
-                            sources.showWindows = true
-                        }
-                    }
-                    Segment {
-                        text: qsTr("영역")
-                        showCount: false
-                        current: sources.regionMode
-                        onClicked: {
-                            if (sources.hasRegion) sources.regionMode = true
-                            else picker.regionRequested()
-                        }
-                    }
+                    sources.regionMode = false
+                    sources.showWindows = index === 1
                 }
             }
             Item { Layout.fillWidth: true }
@@ -99,20 +52,17 @@ Item {
                 anchors.centerIn: parent
                 spacing: 14
 
-                Rectangle {
+                RoundedClip {
                     anchors.horizontalCenter: parent.horizontalCenter
                     width: 520
                     height: 300
-                    radius: Theme.radius + 2
-                    color: "#0B0C10"
-                    border.color: Theme.accent
-                    border.width: 2
+                    radius: Theme.cardRadius
+                    Rectangle { anchors.fill: parent; color: Theme.mediaBackground }
                     Image {
                         id: regionImage
                         anchors.fill: parent
-                        anchors.margins: 4
                         source: sources.regionThumbnail
-                        sourceSize: Qt.size(512, 292)
+                        sourceSize: Qt.size(1040, 600)
                         fillMode: Image.PreserveAspectFit
                         cache: false
                     }
@@ -130,17 +80,18 @@ Item {
                     text: sources.regionTitle
                     color: Theme.text
                     font.family: Theme.fontFamily
-                    font.pixelSize: 14
+                    font.pixelSize: 15
                     font.weight: Font.DemiBold
                 }
                 Row {
                     anchors.horizontalCenter: parent.horizontalCenter
                     spacing: 8
-                    Button {
+                    AppButton {
                         text: qsTr("영역 다시 선택…")
                         onClicked: picker.regionRequested()
                     }
-                    Button {
+                    AppButton {
+                        primary: true
                         text: qsTr("녹화")
                         onClicked: recorder.start()
                     }

@@ -4,6 +4,7 @@ import QtQuick.Dialogs
 import QtQuick.Layouts
 
 // ELVideo player window (player process). Keys follow PotPlayer where it has one.
+// Always dark, with the controls on a floating HUD like the system player.
 ApplicationWindow {
     id: win
 
@@ -23,7 +24,7 @@ ApplicationWindow {
     palette.button: Theme.surfaceRaised
     palette.buttonText: Theme.text
     palette.highlight: Theme.accent
-    palette.highlightedText: Theme.background
+    palette.highlightedText: Theme.accentText
     palette.light: Theme.surfaceHover
     palette.mid: Theme.border
     palette.dark: Theme.textFaint
@@ -137,6 +138,8 @@ ApplicationWindow {
     }
     function isSubtitle(url) { return /\.(srt|ass|ssa|smi|sami|vtt|sub|sup)$/i.test(url) }
 
+    Binding { target: Theme; property: "appearance"; value: "dark" }
+
     Component.onCompleted: {
         desktop.useDarkTitleBar(win)
         if (initialFile.length > 0) player.open(initialFile)
@@ -227,10 +230,12 @@ ApplicationWindow {
             anchors.horizontalCenter: parent.horizontalCenter
             text: qsTr("동영상을 끌어다 놓거나 여세요")
             color: Theme.textDim
+            font.family: Theme.fontFamily
             font.pixelSize: 15
         }
-        Button {
+        AppButton {
             anchors.horizontalCenter: parent.horizontalCenter
+            primary: true
             text: qsTr("파일 열기…")
             onClicked: openDialog.open()
         }
@@ -239,19 +244,23 @@ ApplicationWindow {
     // On-screen messages.
     Rectangle {
         id: osdBox
-        x: 20
-        y: 20
-        width: osdText.implicitWidth + 24
-        height: 36
-        radius: 8
-        color: Qt.rgba(0, 0, 0, 0.6)
+        anchors.horizontalCenter: parent.horizontalCenter
+        y: 24
+        width: osdText.implicitWidth + 36
+        height: 38
+        radius: 19
+        color: Theme.hud
+        border.color: Qt.rgba(1, 1, 1, 0.08)
         opacity: 0
-        Behavior on opacity { NumberAnimation { duration: 200 } }
+        scale: 0.96 + 0.04 * opacity
+        Behavior on opacity { NumberAnimation { duration: 200; easing.type: Easing.OutCubic } }
         Text {
             id: osdText
             anchors.centerIn: parent
-            color: "white"
-            font.pixelSize: 16
+            color: Theme.hudText
+            font.family: Theme.fontFamily
+            font.pixelSize: 15
+            font.weight: Font.DemiBold
         }
         Timer {
             id: osdTimer
@@ -266,16 +275,18 @@ ApplicationWindow {
         anchors.right: parent.right
         anchors.top: parent.top
         anchors.margins: 20
-        width: info.implicitWidth + 24
-        height: info.implicitHeight + 20
-        radius: 8
-        color: Qt.rgba(0, 0, 0, 0.7)
+        width: info.implicitWidth + 32
+        height: info.implicitHeight + 24
+        radius: 14
+        color: Theme.hud
+        border.color: Qt.rgba(1, 1, 1, 0.08)
         Text {
             id: info
             anchors.centerIn: parent
-            color: "white"
-            font.family: Theme.monoFont
+            color: Theme.hudText
+            font.family: Theme.fontFamily
             font.pixelSize: 12
+            lineHeight: 1.3
             text: [player.path,
                    qsTr("영상 %1×%2, 디코딩 %3").arg(player.videoWidth).arg(player.videoHeight)
                        .arg(player.hwdec.length > 0 && player.hwdec !== "no" ? player.hwdec : qsTr("소프트웨어")),
@@ -288,29 +299,42 @@ ApplicationWindow {
     // Controls.
     Rectangle {
         id: controls
-        anchors.left: parent.left
-        anchors.right: parent.right
+        anchors.horizontalCenter: parent.horizontalCenter
         anchors.bottom: parent.bottom
-        height: 96
+        anchors.bottomMargin: win.fullscreen ? 28 : 16
+        width: Math.min(parent.width - 32, 980)
+        height: 86
+        radius: Theme.barRadius + 2
+        color: Theme.hud
+        border.color: Qt.rgba(1, 1, 1, 0.08)
         opacity: !win.mini && (win.controlsShown || player.paused || player.idle) ? 1 : 0
         visible: opacity > 0
-        Behavior on opacity { NumberAnimation { duration: 180 } }
-        gradient: Gradient {
-            GradientStop { position: 0; color: "transparent" }
-            GradientStop { position: 1; color: Qt.rgba(0, 0, 0, 0.85) }
-        }
+        transform: Translate { y: controls.opacity < 1 ? 8 * (1 - controls.opacity) : 0 }
+        Behavior on opacity { NumberAnimation { duration: Theme.normal; easing.type: Easing.OutCubic } }
+        // No layer (and so no drop shadow): the seek preview pops out above the bar.
         HoverHandler { id: controlsHover }
         // Lift subtitles above the controls while they show (mpv units: 720-line scale).
-        onVisibleChanged: player.setMpvProperty("sub-margin-y", visible ? Math.round((height + 8) * 720 / win.height) : 22)
+        function liftSubtitles() {
+            player.setMpvProperty("sub-margin-y", visible ? Math.round((height + anchors.bottomMargin + 8) * 720 / win.height) : 22)
+        }
+        onVisibleChanged: liftSubtitles()
+        Connections {
+            target: win
+            function onHeightChanged() { controls.liftSubtitles() }
+        }
+        Connections {
+            target: player
+            function onFileLoaded() { controls.liftSubtitles() }
+        }
 
         SeekBar {
             id: seekBar
             player: player
             anchors.left: parent.left
             anchors.right: parent.right
-            anchors.leftMargin: 16
-            anchors.rightMargin: 16
-            y: 30
+            anchors.leftMargin: 18
+            anchors.rightMargin: 18
+            y: 8
         }
 
         RowLayout {
@@ -319,27 +343,31 @@ ApplicationWindow {
             anchors.bottom: parent.bottom
             anchors.leftMargin: 10
             anchors.rightMargin: 10
-            anchors.bottomMargin: 6
+            anchors.bottomMargin: 8
             spacing: 2
 
             IconButton {
+                onHud: true
                 glyph: player.paused || player.eof ? Theme.iconPlay : Theme.iconPause
                 tip: player.paused ? qsTr("재생 (Space)") : qsTr("일시정지 (Space)")
                 onClicked: player.eof ? player.seek(0) : player.togglePause()
             }
             IconButton {
+                onHud: true
                 glyph: ""  // Previous
                 tip: qsTr("이전 파일 (PgUp)")
                 enabled: player.playlistPos > 0
                 onClicked: player.playlistStep(-1)
             }
             IconButton {
+                onHud: true
                 glyph: ""  // Next
                 tip: qsTr("다음 파일 (PgDn)")
                 enabled: player.playlistPos >= 0 && player.playlistPos + 1 < player.playlistCount
                 onClicked: player.playlistStep(1)
             }
             IconButton {
+                onHud: true
                 glyph: player.muted || player.volume === 0 ? "" : Theme.iconVolume
                 tip: qsTr("음소거 (M)")
                 onClicked: player.muted = !player.muted
@@ -359,49 +387,52 @@ ApplicationWindow {
                     width: volumeSlider.availableWidth
                     height: 4
                     radius: 2
-                    color: Qt.rgba(1, 1, 1, 0.25)
+                    color: Qt.rgba(1, 1, 1, 0.22)
                     Rectangle {
                         width: volumeSlider.visualPosition * parent.width
                         height: parent.height
                         radius: 2
-                        color: volumeSlider.value > 100 ? Theme.accent : Theme.text  // above 100 % is boost
+                        color: volumeSlider.value > 100 ? Theme.warning : Theme.hudText  // above 100 % is boost
                     }
                 }
                 handle: Rectangle {
                     x: volumeSlider.leftPadding + volumeSlider.visualPosition * (volumeSlider.availableWidth - width)
                     y: volumeSlider.topPadding + volumeSlider.availableHeight / 2 - height / 2
-                    width: 12
-                    height: 12
-                    radius: 6
-                    color: Theme.text
+                    width: 14
+                    height: 14
+                    radius: 7
+                    color: "white"
+                    scale: volumeSlider.pressed ? 1.15 : volumeSlider.hovered ? 1 : 0.85
+                    Behavior on scale { NumberAnimation { duration: Theme.fast } }
                 }
             }
             Text {
                 Layout.leftMargin: 8
                 text: seekBar.format(player.position) + " / " + seekBar.format(player.duration)
-                color: Theme.text
-                font.family: Theme.monoFont
+                color: Theme.hudTextDim
+                font.family: Theme.fontFamily
                 font.pixelSize: 13
+                font.features: { "tnum": 1 }
             }
             Item { Layout.fillWidth: true }
 
             IconButton {
+                onHud: true
                 visible: player.chapters.length > 0
                 glyph: "\uE8FD"  // BulletedList
                 tip: qsTr("챕터 (Shift+PgUp / PgDn)")
                 onClicked: chapterMenu.popup()
             }
-            ToolButton {
-                text: player.speed.toFixed(2).replace(/0$/, "") + "x"
-                font.pixelSize: 13
+            HudButton {
+                text: Number(player.speed.toFixed(2)) + "×"
                 onClicked: speedMenu.popup()
                 ToolTip.visible: hovered
                 ToolTip.text: qsTr("배속 (C 빠르게, X 느리게, Z 원래대로)")
-                Menu {
+                AppMenu {
                     id: speedMenu
                     Repeater {
                         model: [0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2, 3, 4]
-                        MenuItem {
+                        AppMenuItem {
                             required property var modelData
                             text: modelData + "x"
                             checkable: true
@@ -412,43 +443,50 @@ ApplicationWindow {
                 }
             }
             IconButton {
+                onHud: true
                 glyph: ""  // CC
                 tip: qsTr("자막")
                 enabled: !player.idle
                 onClicked: subMenu.popup()
             }
             IconButton {
+                onHud: true
                 glyph: ""  // Audio
                 tip: qsTr("오디오 트랙")
                 enabled: !player.idle
                 onClicked: audioMenu.popup()
             }
             IconButton {
+                onHud: true
                 glyph: ""  // RepeatAll
                 tip: qsTr("구간 반복 A-B (L)")
-                iconColor: player.loopA >= 0 ? Theme.accent : Theme.text
+                checkedLook: player.loopA >= 0
                 enabled: !player.idle
                 onClicked: win.abLoop()
             }
             IconButton {
+                onHud: true
                 glyph: Theme.iconCamera
                 tip: qsTr("현재 장면 저장 (S)")
                 enabled: !player.idle
                 onClicked: win.takeScreenshot()
             }
             IconButton {
+                onHud: true
                 glyph: ""  // Pin
                 tip: qsTr("항상 위 (Ctrl+T)")
-                iconColor: win.onTop ? Theme.accent : Theme.text
+                checkedLook: win.onTop
                 onClicked: win.onTop = !win.onTop
             }
             IconButton {
+                onHud: true
                 glyph: "\uE8A7"  // OpenInNewWindow
                 tip: qsTr("미니 플레이어 (P)")
                 enabled: !player.idle
                 onClicked: win.toggleMini()
             }
             IconButton {
+                onHud: true
                 glyph: win.fullscreen ? "" : ""
                 tip: qsTr("전체 화면 (Enter, 더블클릭)")
                 onClicked: win.toggleFullscreen()
@@ -465,8 +503,11 @@ ApplicationWindow {
         Rectangle {
             anchors.left: parent.left
             anchors.right: parent.right
-            height: 30
-            color: Qt.rgba(0, 0, 0, 0.55)
+            height: 32
+            gradient: Gradient {
+                GradientStop { position: 0; color: Qt.rgba(0, 0, 0, 0.6) }
+                GradientStop { position: 1; color: "transparent" }
+            }
             opacity: miniHover.hovered ? 1 : 0
             Behavior on opacity { NumberAnimation { duration: 150 } }
             DragHandler {
@@ -477,6 +518,7 @@ ApplicationWindow {
                 anchors.right: parent.right
                 anchors.verticalCenter: parent.verticalCenter
                 IconButton {
+                    onHud: true
                     width: 30
                     height: 30
                     iconSize: 12
@@ -485,6 +527,7 @@ ApplicationWindow {
                     onClicked: player.togglePause()
                 }
                 IconButton {
+                    onHud: true
                     width: 30
                     height: 30
                     iconSize: 12
@@ -493,6 +536,7 @@ ApplicationWindow {
                     onClicked: win.toggleMini()
                 }
                 IconButton {
+                    onHud: true
                     width: 30
                     height: 30
                     iconSize: 12
@@ -506,17 +550,17 @@ ApplicationWindow {
             anchors.bottom: parent.bottom
             height: 3
             width: player.duration > 0 ? parent.width * player.position / player.duration : 0
-            color: Theme.record
+            color: Theme.accent
         }
     }
 
     // Track menus, rebuilt from mpv's track-list.
-    component TrackMenu: Menu {
+    component TrackMenu: AppMenu {
         id: menu
         property string type
         Instantiator {
             model: player.tracks.filter(t => t.type === menu.type)
-            delegate: MenuItem {
+            delegate: AppMenuItem {
                 required property var modelData
                 text: (modelData.title || modelData.lang || (qsTr("트랙 ") + modelData.id))
                       + (modelData.lang && modelData.title ? " [" + modelData.lang + "]" : "")
@@ -532,25 +576,25 @@ ApplicationWindow {
     TrackMenu {
         id: subMenu
         type: "sub"
-        MenuItem { text: qsTr("자막 끄기"); onTriggered: player.selectTrack("sub", 0) }
-        MenuSeparator {}
-        MenuItem { text: qsTr("자막 파일 추가…"); onTriggered: subtitleDialog.open() }
-        MenuItem { text: qsTr("자막 0.1초 빠르게 (<)"); onTriggered: { player.addSubDelay(-0.1); win.osd(qsTr("자막 싱크 %1초").arg((player.subDelay - 0.1).toFixed(1))) } }
-        MenuItem { text: qsTr("자막 0.1초 느리게 (>)"); onTriggered: { player.addSubDelay(0.1); win.osd(qsTr("자막 싱크 %1초").arg((player.subDelay + 0.1).toFixed(1))) } }
+        AppMenuItem { text: qsTr("자막 끄기"); onTriggered: player.selectTrack("sub", 0) }
+        AppMenuSeparator {}
+        AppMenuItem { text: qsTr("자막 파일 추가…"); onTriggered: subtitleDialog.open() }
+        AppMenuItem { text: qsTr("자막 0.1초 빠르게 (<)"); onTriggered: { player.addSubDelay(-0.1); win.osd(qsTr("자막 싱크 %1초").arg((player.subDelay - 0.1).toFixed(1))) } }
+        AppMenuItem { text: qsTr("자막 0.1초 느리게 (>)"); onTriggered: { player.addSubDelay(0.1); win.osd(qsTr("자막 싱크 %1초").arg((player.subDelay + 0.1).toFixed(1))) } }
     }
     TrackMenu {
         id: audioMenu
         type: "audio"
-        MenuSeparator {}
-        MenuItem { text: qsTr("오디오 0.05초 빠르게 ([)"); onTriggered: player.addAudioDelay(-0.05) }
-        MenuItem { text: qsTr("오디오 0.05초 느리게 (])"); onTriggered: player.addAudioDelay(0.05) }
+        AppMenuSeparator {}
+        AppMenuItem { text: qsTr("오디오 0.05초 빠르게 ([)"); onTriggered: player.addAudioDelay(-0.05) }
+        AppMenuItem { text: qsTr("오디오 0.05초 느리게 (])"); onTriggered: player.addAudioDelay(0.05) }
     }
 
-    Menu {
+    AppMenu {
         id: chapterMenu
         Instantiator {
             model: player.chapters
-            delegate: MenuItem {
+            delegate: AppMenuItem {
                 required property var modelData
                 required property int index
                 text: seekBar.format(modelData.time) + "   " + (modelData.title || qsTr("챕터 %1").arg(index + 1))
@@ -560,51 +604,51 @@ ApplicationWindow {
             onObjectRemoved: (index, object) => chapterMenu.removeItem(object)
         }
     }
-    Menu {
+    AppMenu {
         id: pictureMenu
         title: qsTr("화면")
-        Menu {
+        AppMenu {
             title: qsTr("화면 비율")
-            MenuItem { text: qsTr("원본"); onTriggered: win.setAspect("-1", qsTr("원본")) }
-            MenuItem { text: "16:9"; onTriggered: win.setAspect("16:9", "16:9") }
-            MenuItem { text: "4:3"; onTriggered: win.setAspect("4:3", "4:3") }
-            MenuItem { text: "21:9 (2.35:1)"; onTriggered: win.setAspect("2.35:1", "2.35:1") }
-            MenuItem { text: "1:1"; onTriggered: win.setAspect("1:1", "1:1") }
+            AppMenuItem { text: qsTr("원본"); onTriggered: win.setAspect("-1", qsTr("원본")) }
+            AppMenuItem { text: "16:9"; onTriggered: win.setAspect("16:9", "16:9") }
+            AppMenuItem { text: "4:3"; onTriggered: win.setAspect("4:3", "4:3") }
+            AppMenuItem { text: "21:9 (2.35:1)"; onTriggered: win.setAspect("2.35:1", "2.35:1") }
+            AppMenuItem { text: "1:1"; onTriggered: win.setAspect("1:1", "1:1") }
         }
-        MenuItem { text: qsTr("확대 (Ctrl+=)"); onTriggered: win.adjust("video-zoom", 0.1) }
-        MenuItem { text: qsTr("축소 (Ctrl+-)"); onTriggered: win.adjust("video-zoom", -0.1) }
-        MenuItem { text: qsTr("90° 회전 (Ctrl+R)"); onTriggered: win.rotate() }
-        MenuItem { text: qsTr("좌우 반전"); checkable: true; checked: win.hflip; onTriggered: win.flip(true) }
-        MenuItem { text: qsTr("상하 반전"); checkable: true; checked: win.vflip; onTriggered: win.flip(false) }
-        MenuSeparator {}
-        MenuItem { text: qsTr("밝기 + / − (W / Q)"); onTriggered: win.adjust("brightness", 5) }
-        MenuItem { text: qsTr("대비 + / − (R / E)"); onTriggered: win.adjust("contrast", 5) }
-        MenuItem { text: qsTr("채도 + / − (Y / T)"); onTriggered: win.adjust("saturation", 5) }
-        MenuItem { text: qsTr("화면 조정 초기화 (U)"); onTriggered: win.adjust("", 0) }
+        AppMenuItem { text: qsTr("확대 (Ctrl+=)"); onTriggered: win.adjust("video-zoom", 0.1) }
+        AppMenuItem { text: qsTr("축소 (Ctrl+-)"); onTriggered: win.adjust("video-zoom", -0.1) }
+        AppMenuItem { text: qsTr("90° 회전 (Ctrl+R)"); onTriggered: win.rotate() }
+        AppMenuItem { text: qsTr("좌우 반전"); checkable: true; checked: win.hflip; onTriggered: win.flip(true) }
+        AppMenuItem { text: qsTr("상하 반전"); checkable: true; checked: win.vflip; onTriggered: win.flip(false) }
+        AppMenuSeparator {}
+        AppMenuItem { text: qsTr("밝기 + / − (W / Q)"); onTriggered: win.adjust("brightness", 5) }
+        AppMenuItem { text: qsTr("대비 + / − (R / E)"); onTriggered: win.adjust("contrast", 5) }
+        AppMenuItem { text: qsTr("채도 + / − (Y / T)"); onTriggered: win.adjust("saturation", 5) }
+        AppMenuItem { text: qsTr("화면 조정 초기화 (U)"); onTriggered: win.adjust("", 0) }
     }
 
-    Menu {
+    AppMenu {
         id: contextMenu
-        MenuItem { text: qsTr("파일 열기… (Ctrl+O)"); onTriggered: openDialog.open() }
-        MenuItem { text: qsTr("자막 파일 추가…"); enabled: !player.idle; onTriggered: subtitleDialog.open() }
-        MenuSeparator {}
-        MenuItem { text: player.paused ? qsTr("재생") : qsTr("일시정지"); enabled: !player.idle; onTriggered: player.togglePause() }
-        MenuItem { text: qsTr("구간 반복 A-B (L)"); enabled: !player.idle; onTriggered: win.abLoop() }
-        MenuItem { text: qsTr("구간 반복 해제"); enabled: player.loopA >= 0; onTriggered: player.clearAbLoop() }
-        MenuItem { text: qsTr("현재 장면 저장 (S)"); enabled: !player.idle; onTriggered: win.takeScreenshot() }
-        MenuSeparator {}
-        Menu {
+        AppMenuItem { text: qsTr("파일 열기… (Ctrl+O)"); onTriggered: openDialog.open() }
+        AppMenuItem { text: qsTr("자막 파일 추가…"); enabled: !player.idle; onTriggered: subtitleDialog.open() }
+        AppMenuSeparator {}
+        AppMenuItem { text: player.paused ? qsTr("재생") : qsTr("일시정지"); enabled: !player.idle; onTriggered: player.togglePause() }
+        AppMenuItem { text: qsTr("구간 반복 A-B (L)"); enabled: !player.idle; onTriggered: win.abLoop() }
+        AppMenuItem { text: qsTr("구간 반복 해제"); enabled: player.loopA >= 0; onTriggered: player.clearAbLoop() }
+        AppMenuItem { text: qsTr("현재 장면 저장 (S)"); enabled: !player.idle; onTriggered: win.takeScreenshot() }
+        AppMenuSeparator {}
+        AppMenu {
             title: qsTr("챕터")
             enabled: player.chapters.length > 0
-            MenuItem { text: qsTr("다음 챕터 (Shift+PgDn)"); onTriggered: win.chapterStep(1) }
-            MenuItem { text: qsTr("이전 챕터 (Shift+PgUp)"); onTriggered: win.chapterStep(-1) }
+            AppMenuItem { text: qsTr("다음 챕터 (Shift+PgDn)"); onTriggered: win.chapterStep(1) }
+            AppMenuItem { text: qsTr("이전 챕터 (Shift+PgUp)"); onTriggered: win.chapterStep(-1) }
         }
-        MenuItem { text: qsTr("화면…"); enabled: !player.idle; onTriggered: pictureMenu.popup() }
-        MenuItem { text: qsTr("음량 평준화 (N)"); checkable: true; checked: win.normalize; enabled: !player.idle; onTriggered: win.toggleNormalize() }
-        MenuItem { text: qsTr("미니 플레이어 (P)"); checkable: true; checked: win.mini; enabled: !player.idle; onTriggered: win.toggleMini() }
-        MenuItem { text: qsTr("미디어 정보 (I)"); checkable: true; checked: win.infoShown; onTriggered: win.infoShown = !win.infoShown }
-        MenuItem { text: qsTr("항상 위 (Ctrl+T)"); checkable: true; checked: win.onTop; onTriggered: win.onTop = !win.onTop }
-        MenuItem { text: qsTr("전체 화면 (Enter)"); onTriggered: win.toggleFullscreen() }
+        AppMenuItem { text: qsTr("화면…"); enabled: !player.idle; onTriggered: pictureMenu.popup() }
+        AppMenuItem { text: qsTr("음량 평준화 (N)"); checkable: true; checked: win.normalize; enabled: !player.idle; onTriggered: win.toggleNormalize() }
+        AppMenuItem { text: qsTr("미니 플레이어 (P)"); checkable: true; checked: win.mini; enabled: !player.idle; onTriggered: win.toggleMini() }
+        AppMenuItem { text: qsTr("미디어 정보 (I)"); checkable: true; checked: win.infoShown; onTriggered: win.infoShown = !win.infoShown }
+        AppMenuItem { text: qsTr("항상 위 (Ctrl+T)"); checkable: true; checked: win.onTop; onTriggered: win.onTop = !win.onTop }
+        AppMenuItem { text: qsTr("전체 화면 (Enter)"); onTriggered: win.toggleFullscreen() }
     }
 
     FileDialog {

@@ -114,24 +114,27 @@ Item {
                 width: overlay.target.width + 2
                 height: overlay.target.height + 2
                 color: "transparent"
-                border.color: Theme.accent
-                border.width: 2
+                border.color: overlay.dragging ? "white" : Theme.accent
+                border.width: overlay.dragging ? 1 : 3
+                radius: overlay.dragging ? 0 : 4
             }
             Rectangle {
                 visible: overlay.target.width > 0
                 x: Math.min(overlay.target.x, overlay.width - width - 8)
                 y: overlay.target.y > 34 ? overlay.target.y - 30 : overlay.target.y + overlay.target.height + 6
-                width: sizeText.implicitWidth + 16
+                width: sizeText.implicitWidth + 18
                 height: 24
-                radius: 6
-                color: Theme.surface
+                radius: 12
+                color: Theme.hud
                 Text {
                     id: sizeText
                     anchors.centerIn: parent
                     text: Math.round(overlay.target.width * overlay.ratio) + " × " + Math.round(overlay.target.height * overlay.ratio)
-                    color: Theme.text
-                    font.family: Theme.monoFont
-                    font.pixelSize: 13
+                    color: Theme.hudText
+                    font.family: Theme.fontFamily
+                    font.pixelSize: 12
+                    font.weight: Font.DemiBold
+                    font.features: { "tnum": 1 }
                 }
             }
 
@@ -178,33 +181,37 @@ Item {
             // Toolbar, above the mouse area so its buttons get the clicks.
             Rectangle {
                 anchors.horizontalCenter: parent.horizontalCenter
-                y: 16
-                width: bar.implicitWidth + 24
-                height: 48
-                radius: 12
-                color: Theme.surface
-                border.color: Theme.border
+                y: 20
+                width: bar.implicitWidth + 16
+                height: 44
+                radius: 22
+                color: Theme.hud
+                border.color: Qt.rgba(1, 1, 1, 0.08)
                 Row {
                     id: bar
                     anchors.centerIn: parent
-                    spacing: 8
+                    spacing: 4
                     Text {
                         anchors.verticalCenter: parent.verticalCenter
                         text: qsTr("드래그: 영역 · 클릭: 창")
-                        color: Theme.textDim
+                        color: Theme.hudTextDim
                         font.family: Theme.fontFamily
                         font.pixelSize: 13
+                        leftPadding: 10
                         rightPadding: 8
                     }
-                    Button {
+                    HudButton {
+                        glyph: Theme.iconMonitor
                         text: qsTr("이 모니터")
                         onClicked: screenCapture.captureMonitor(overlay)
                     }
-                    Button {
+                    HudButton {
+                        glyph: "\uE740"
                         text: qsTr("전체 화면")
                         onClicked: screenCapture.captureAll()
                     }
-                    Button {
+                    Rectangle { anchors.verticalCenter: parent.verticalCenter; width: 1; height: 18; color: Qt.rgba(1, 1, 1, 0.15) }
+                    HudButton {
                         text: qsTr("취소 (Esc)")
                         onClicked: screenCapture.cancel()
                     }

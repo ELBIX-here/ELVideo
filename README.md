@@ -236,6 +236,18 @@ WGC 프레임(BGRA) ─▶ VideoConverter ─▶ 최신 NV12 텍스처 ─▶ Fr
 - **인코더**: 하드웨어 MFT에는 GPU 표면을 그대로 넘깁니다. 하드웨어 인코더가 없거나 `--software`일 때는 NV12를 CPU로 읽어 와서 소프트웨어 인코더에 넘깁니다(GPU 표면을 소프트웨어 인코더에 넘기면 내부 동기화 때문에 프레임이 밀립니다).
 - **GPU가 여러 개인 시스템**: 캡처 대상 모니터를 구동하는 어댑터에서 디바이스와 인코더를 만듭니다(예: 모니터 1은 Intel QSV, 모니터 2는 NVIDIA).
 
+## 디자인
+
+- macOS/iOS 시스템 앱의 느낌을 따릅니다.
+  - 회색 계층의 배경과 카드, 얇은 구분선, 파란색 강조 하나
+  - 빨간 녹화 버튼: 링 안의 점이 녹화 중에는 둥근 사각형으로 바뀜
+  - 슬라이드되는 세그먼트 컨트롤, 그룹으로 묶은 설정 목록
+  - 화면 위에 뜨는 것(녹화 바, 캡처 툴바, 카운트다운, 플레이어 컨트롤)은 반투명한 어두운 HUD
+- **라이트/다크**: 설정 → 화면 모드 → 모양에서 시스템(기본) / 라이트 / 다크. 시스템을 고르면 Windows 설정을 바로 따라가고, 제목 표시줄도 함께 바뀝니다. 플레이어는 항상 다크입니다.
+- 색과 글꼴은 [Theme.qml](app/qml/Theme.qml) 한 곳에 있습니다. 글꼴은 Windows 11의 Segoe UI Variable(없으면 Segoe UI)이고, 시간은 고정폭 숫자(`tnum`)로 표시해 흔들리지 않습니다.
+- 공용 컨트롤: `AppButton`, `AppComboBox`, `AppSpinBox`, `AppSlider`, `ToggleSwitch`, `SegmentedControl`, `AppMenu`/`AppMenuItem`/`AppMenuSeparator`, `HudButton`, `RoundedClip`(둥근 모서리로 자르기).
+- 화면 점검: `scripts\test\ui_snap.ps1 <이름>`이 실행 중인 Debug 앱(`ELV_TEST_CAPTURABLE=1`)의 창을 `build\ui\<이름>.png`로 저장합니다.
+
 ## 아이콘과 스플래시
 
 - 원본은 [app/resources/elvideo.svg](app/resources/elvideo.svg)입니다. 바꾼 뒤에는 `.ico`를 다시 생성해 커밋합니다.
@@ -245,7 +257,7 @@ WGC 프레임(BGRA) ─▶ VideoConverter ─▶ 최신 NV12 텍스처 ─▶ Fr
   ```
   `.ico`에는 16~256px 9개 크기가 들어 있고 `elvideo.rc`(IDI_ICON1)로 exe에 포함됩니다. 창 제목 표시줄 아이콘도 이것을 씁니다.
 - 앱 안의 로고는 [LogoMark.qml](app/qml/LogoMark.qml)에서 SVG와 같은 좌표로 그립니다. SVG를 고치면 이 파일도 맞춰야 합니다.
-- [Splash.qml](app/qml/Splash.qml): 위 릴에서 아래 릴로 필름이 감기며 돌다가 원본 아이콘 자세로 멈추고, ELVIDEO가 페이드 인/아웃한 뒤 메인 창이 뜹니다(약 3초, 클릭하면 건너뜀).
+- [Splash.qml](app/qml/Splash.qml): 카드가 살짝 튀어나오며 나타나고, 아이콘의 위 릴에서 아래 릴로 필름이 감기며 돌다가 원본 아이콘 자세로 멈춘 뒤 메인 창이 뜹니다(약 2.5초, 클릭하면 건너뜀). 필름은 릴 아래에 그려서, 릴이 돌 때 구멍 사이로 비치지 않습니다.
 
 ## 알려진 문제
 

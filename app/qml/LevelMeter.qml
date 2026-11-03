@@ -21,14 +21,14 @@ Row {
     Rectangle {
         anchors.verticalCenter: parent.verticalCenter
         width: 56
-        height: 5
-        radius: 2.5
-        color: Theme.surfaceHover
+        height: 4
+        radius: 2
+        color: Theme.fill
         Rectangle {
             height: parent.height
             radius: parent.radius
             width: parent.width * meter.fraction
-            color: meter.fraction > 0.95 ? Theme.danger : meter.fraction > 0.8 ? Theme.accent : Theme.success
+            color: meter.fraction > 0.95 ? Theme.danger : meter.fraction > 0.8 ? Theme.warning : Theme.success
             Behavior on width { NumberAnimation { duration: 120 } }
         }
     }

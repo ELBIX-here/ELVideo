@@ -8,29 +8,6 @@ Item {
 
     signal message(string text)
 
-    component Segment: AbstractButton {
-        id: seg
-        property bool current
-        property int count: -1
-        hoverEnabled: true
-        implicitHeight: 32
-        implicitWidth: label.implicitWidth + 28
-        contentItem: Text {
-            id: label
-            text: seg.count >= 0 ? seg.text + "  " + seg.count : seg.text
-            color: seg.current ? Theme.background : seg.hovered ? Theme.text : Theme.textDim
-            font.family: Theme.fontFamily
-            font.pixelSize: 13
-            font.weight: Font.DemiBold
-            horizontalAlignment: Text.AlignHCenter
-            verticalAlignment: Text.AlignVCenter
-        }
-        background: Rectangle {
-            radius: 8
-            color: seg.current ? Theme.accent : "transparent"
-        }
-    }
-
     function open(path, kind) {
         if (kind === "image") desktop.openFile(path)
         else desktop.openInPlayer(path)
@@ -40,40 +17,20 @@ Item {
 
     ColumnLayout {
         anchors.fill: parent
-        spacing: 12
+        spacing: 14
 
         RowLayout {
             Layout.fillWidth: true
             spacing: 8
-            Rectangle {
-                implicitWidth: segments.implicitWidth + 8
-                implicitHeight: 40
-                radius: 10
-                color: Theme.surface
-                border.color: Theme.border
-                Row {
-                    id: segments
-                    anchors.centerIn: parent
-                    spacing: 4
-                    Segment {
-                        text: qsTr("전체")
-                        count: library.videoCount + library.imageCount
-                        current: library.filter === "all"
-                        onClicked: library.filter = "all"
-                    }
-                    Segment {
-                        text: qsTr("동영상")
-                        count: library.videoCount
-                        current: library.filter === "video"
-                        onClicked: library.filter = "video"
-                    }
-                    Segment {
-                        text: qsTr("캡처")
-                        count: library.imageCount
-                        current: library.filter === "image"
-                        onClicked: library.filter = "image"
-                    }
-                }
+            SegmentedControl {
+                readonly property var keys: ["all", "video", "image"]
+                segments: [
+                    { text: qsTr("전체"), count: library.videoCount + library.imageCount },
+                    { text: qsTr("동영상"), count: library.videoCount },
+                    { text: qsTr("캡처"), count: library.imageCount }
+                ]
+                currentIndex: Math.max(0, keys.indexOf(library.filter))
+                onActivated: index => library.filter = keys[index]
             }
             Item { Layout.fillWidth: true }
             IconButton {
@@ -98,7 +55,7 @@ Item {
             ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
             readonly property int columns: Math.max(1, Math.floor(width / 230))
             cellWidth: Math.floor(width / columns)
-            cellHeight: Math.round((cellWidth - 28) * 9 / 16) + 72
+            cellHeight: Math.round((cellWidth - 28) * 9 / 16) + 66
 
             delegate: Item {
                 id: cell
@@ -124,19 +81,20 @@ Item {
                         onTapped: itemMenu.popup()
                     }
                     background: Rectangle {
-                        radius: Theme.radius + 2
-                        color: card.hovered ? Theme.surfaceHover : Theme.surface
-                        border.color: Theme.border
+                        radius: Theme.cardRadius + 2
+                        color: card.hovered ? Theme.surfaceHover : "transparent"
+                        border.width: card.visualFocus ? 2 : 0
+                        border.color: Theme.accent
+                        Behavior on color { ColorAnimation { duration: Theme.fast } }
                     }
                     contentItem: Column {
-                        spacing: 6
+                        spacing: 4
                         padding: 8
-                        Rectangle {
+                        RoundedClip {
                             width: card.width - 16
                             height: Math.round(width * 9 / 16)
                             radius: Theme.radius - 2
-                            color: "#0B0C10"
-                            clip: true
+                            Rectangle { anchors.fill: parent; color: Theme.mediaBackground }
                             Image {
                                 id: thumb
                                 anchors.fill: parent
@@ -146,6 +104,9 @@ Item {
                                 asynchronous: true
                                 readonly property bool hasFrame: status === Image.Ready && implicitWidth > 1
                                 opacity: hasFrame ? 1 : 0
+                                Behavior on opacity { NumberAnimation { duration: 180 } }
+                                scale: card.hovered ? 1.03 : 1
+                                Behavior on scale { NumberAnimation { duration: Theme.normal; easing.type: Easing.OutCubic } }
                             }
                             Icon {
                                 anchors.centerIn: parent
@@ -159,17 +120,19 @@ Item {
                                 anchors.right: parent.right
                                 anchors.bottom: parent.bottom
                                 anchors.margins: 6
-                                width: durationText.implicitWidth + 10
-                                height: 20
-                                radius: 4
-                                color: Qt.rgba(0, 0, 0, 0.7)
+                                width: durationText.implicitWidth + 12
+                                height: 18
+                                radius: 9
+                                color: Qt.rgba(0, 0, 0, 0.55)
                                 Text {
                                     id: durationText
                                     anchors.centerIn: parent
                                     text: cell.duration
                                     color: "white"
-                                    font.family: Theme.monoFont
+                                    font.family: Theme.fontFamily
                                     font.pixelSize: 11
+                                    font.weight: Font.DemiBold
+                                    font.features: { "tnum": 1 }
                                 }
                             }
                             Rectangle {  // replay / capture badge
@@ -177,34 +140,41 @@ Item {
                                 anchors.left: parent.left
                                 anchors.top: parent.top
                                 anchors.margins: 6
-                                width: badge.implicitWidth + 10
-                                height: 20
-                                radius: 4
-                                color: cell.kind === "replay" ? Theme.accent : Qt.rgba(0, 0, 0, 0.7)
+                                width: badge.implicitWidth + 12
+                                height: 18
+                                radius: 9
+                                color: cell.kind === "replay" ? Theme.accent : Qt.rgba(0, 0, 0, 0.55)
                                 Text {
                                     id: badge
                                     anchors.centerIn: parent
                                     text: cell.kind === "replay" ? qsTr("리플레이") : qsTr("캡처")
-                                    color: cell.kind === "replay" ? Theme.background : "white"
+                                    color: "white"
                                     font.family: Theme.fontFamily
                                     font.pixelSize: 11
                                     font.weight: Font.DemiBold
                                 }
                             }
                             Rectangle {  // play on hover
-                                visible: card.hovered
                                 anchors.centerIn: parent
                                 width: 44
                                 height: 44
                                 radius: 22
-                                color: Qt.rgba(0, 0, 0, 0.55)
+                                color: Qt.rgba(0, 0, 0, 0.45)
+                                border.color: Qt.rgba(1, 1, 1, 0.25)
+                                opacity: card.hovered ? 1 : 0
+                                scale: card.hovered ? 1 : 0.85
+                                Behavior on opacity { NumberAnimation { duration: Theme.fast } }
+                                Behavior on scale { NumberAnimation { duration: Theme.normal; easing.type: Easing.OutBack } }
                                 Icon {
                                     anchors.centerIn: parent
+                                    anchors.horizontalCenterOffset: cell.kind === "image" ? 0 : 1
                                     glyph: cell.kind === "image" ? Theme.iconSearch : Theme.iconPlay
-                                    size: 18
+                                    size: 17
+                                    color: "white"
                                 }
                             }
                         }
+                        Item { width: 1; height: 4 }
                         Text {
                             width: card.width - 16
                             text: cell.name
@@ -212,6 +182,7 @@ Item {
                             color: Theme.text
                             font.family: Theme.fontFamily
                             font.pixelSize: 12
+                            font.weight: Font.DemiBold
                         }
                         Text {
                             width: card.width - 16
@@ -224,18 +195,19 @@ Item {
                     }
                     onClicked: page.open(cell.path, cell.kind)
                 }
-                Menu {
+                AppMenu {
                     id: itemMenu
-                    MenuItem {
+                    AppMenuItem {
                         text: cell.kind === "image" ? qsTr("열기") : qsTr("재생")
                         onTriggered: page.open(cell.path, cell.kind)
                     }
-                    MenuItem {
+                    AppMenuItem {
                         text: qsTr("폴더에서 보기")
                         onTriggered: desktop.revealFile(cell.path)
                     }
-                    MenuSeparator {}
-                    MenuItem {
+                    AppMenuSeparator {}
+                    AppMenuItem {
+                        destructive: true
                         text: qsTr("휴지통으로 이동")
                         onTriggered: {
                             const name = cell.name

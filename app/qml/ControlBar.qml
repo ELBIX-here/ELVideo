@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
+import QtQuick.Effects
 
 // Bottom bar of the main window: what will be recorded, record/pause, time and status.
 Rectangle {
@@ -8,8 +9,16 @@ Rectangle {
 
     implicitHeight: 84
     color: Theme.surface
-    border.color: Theme.border
-    radius: Theme.radius + 4
+    border.color: Theme.dark ? Theme.border : "transparent"
+    radius: Theme.barRadius
+    layer.enabled: !Theme.dark
+    layer.effect: MultiEffect {
+        shadowEnabled: true
+        shadowColor: Theme.shadow
+        shadowBlur: 0.9
+        shadowVerticalOffset: 3
+        autoPaddingEnabled: true
+    }
 
     readonly property bool active: recorder.active
     readonly property bool replay: recorder.replayMode
@@ -73,13 +82,13 @@ Rectangle {
             IconButton {
                 Layout.preferredWidth: 40
                 Layout.preferredHeight: 40
+                round: true
                 glyph: bar.replay ? Theme.iconSave : recorder.paused ? Theme.iconPlay : Theme.iconPause
-                iconColor: bar.replay ? Theme.accent : Theme.text
-                iconSize: 18
+                iconSize: 17
+                checkedLook: bar.replay
                 tip: bar.replay ? qsTr("리플레이 저장") + "  (" + appSettings.hotkeyReplay + ")"
                                 : (recorder.paused ? qsTr("다시 시작") : qsTr("일시정지")) + "  (" + appSettings.hotkeyPause + ")"
                 enabled: bar.active
-                opacity: bar.active ? 1 : 0.35
                 onClicked: bar.replay ? recorder.saveReplay() : recorder.togglePause()
             }
             RecordButton {
@@ -95,21 +104,22 @@ Rectangle {
             IconButton {
                 Layout.preferredWidth: 40
                 Layout.preferredHeight: 40
+                round: true
                 glyph: Theme.iconReplay
-                iconSize: 18
-                iconColor: bar.replay ? Theme.accent : Theme.text
+                iconSize: 17
+                checkedLook: bar.replay
                 tip: bar.replay ? qsTr("리플레이 버퍼 끄기")
                                 : qsTr("리플레이 버퍼 켜기 — 최근 %1초를 메모리에 두었다가 %2로 저장")
                                       .arg(appSettings.replaySeconds).arg(appSettings.hotkeyReplay)
                 enabled: !recorder.busy && captureSupported && (bar.replay || !bar.active)
-                opacity: enabled ? 1 : 0.35
                 onClicked: bar.replay ? recorder.stop() : recorder.startReplay()
             }
             IconButton {
                 Layout.preferredWidth: 40
                 Layout.preferredHeight: 40
+                round: true
                 glyph: Theme.iconCamera
-                iconSize: 18
+                iconSize: 17
                 tip: qsTr("화면 캡처") + "  (" + appSettings.hotkeyScreenshot + ")"
                 enabled: !screenCapture.busy && !screenCapture.active
                 onClicked: screenCapture.start()
@@ -126,18 +136,20 @@ Rectangle {
                 Layout.alignment: Qt.AlignRight
                 text: bar.replay ? Theme.formatTime(recorder.replayBufferedSeconds * 1000) : Theme.formatTime(recorder.elapsedMs)
                 color: recorder.state === "recording" ? Theme.text : Theme.textDim
-                font.family: Theme.monoFont
-                font.pixelSize: 22
+                font.family: Theme.displayFont
+                font.pixelSize: 26
+                font.weight: Font.Light
+                font.features: { "tnum": 1 }  // digits keep their width while counting
             }
             Row {
                 Layout.alignment: Qt.AlignRight
                 spacing: 6
                 Rectangle {
                     anchors.verticalCenter: parent.verticalCenter
-                    width: 8; height: 8; radius: 4
+                    width: 7; height: 7; radius: 3.5
                     color: bar.replay ? Theme.accent
                          : recorder.state === "recording" ? Theme.record
-                         : recorder.state === "paused" ? Theme.accent
+                         : recorder.state === "paused" ? Theme.warning
                          : recorder.state === "error" ? Theme.danger : Theme.textFaint
                     property real blink: 1
                     opacity: recorder.state === "recording" ? blink : 1

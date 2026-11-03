@@ -2,6 +2,7 @@
   <rect x="0" y="0" width="512" height="512" rx="112" fill="#16181F"/>
   <rect x="156" y="58" width="200" height="16" rx="8" fill="#ECE8E1"/>
   <rect x="156" y="438" width="200" height="16" rx="8" fill="#ECE8E1"/>
+  <path d="M212 176 L300 336" stroke="#F2A93B" stroke-width="10" stroke-linecap="round" fill="none"/>
   <circle cx="256" cy="168" r="46" fill="#F2A93B"/>
   <circle cx="256" cy="140" r="8" fill="#16181F"/>
   <circle cx="232" cy="182" r="8" fill="#16181F"/>
@@ -12,7 +13,6 @@
   <circle cx="221" cy="364" r="11" fill="#16181F"/>
   <circle cx="291" cy="364" r="11" fill="#16181F"/>
   <circle cx="256" cy="344" r="12" fill="#ECE8E1"/>
-  <path d="M212 176 L300 336" stroke="#F2A93B" stroke-width="10" stroke-linecap="round" fill="none"/>
   <circle cx="256" cy="168" r="84" fill="none" stroke="#ECE8E1" stroke-width="12"/>
   <circle cx="256" cy="344" r="84" fill="none" stroke="#ECE8E1" stroke-width="12"/>
   <circle cx="256" cy="256" r="16" fill="#E5484D" stroke="#16181F" stroke-width="6"/>

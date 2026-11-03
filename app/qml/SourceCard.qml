@@ -1,7 +1,8 @@
 import QtQuick
 import QtQuick.Controls
 
-// One monitor or window in the picker: live-ish thumbnail plus title.
+// One monitor or window in the picker: the thumbnail with rounded corners, the
+// title below it, and a blue ring around the thumbnail when selected.
 AbstractButton {
     id: card
 
@@ -15,52 +16,69 @@ AbstractButton {
     Accessible.name: title
 
     background: Rectangle {
-        radius: Theme.radius + 2
-        color: card.selected ? Theme.surfaceRaised : card.hovered ? Theme.surfaceHover : Theme.surface
-        border.width: card.selected ? 2 : 1
-        border.color: card.selected ? Theme.accent : card.visualFocus ? Theme.textDim : Theme.border
-        Behavior on color { ColorAnimation { duration: 120 } }
+        radius: Theme.cardRadius + 2
+        color: card.hovered && !card.selected ? Theme.surfaceHover : "transparent"
+        border.width: card.visualFocus ? 2 : 0
+        border.color: Theme.accent
+        Behavior on color { ColorAnimation { duration: Theme.fast } }
     }
 
     contentItem: Column {
         spacing: 8
         padding: 8
 
-        Rectangle {
-            id: frame
+        Item {
+            id: frameArea
             width: card.width - 16
             height: Math.round(width * 9 / 16)
-            radius: Theme.radius - 2
-            color: "#0B0C10"
-            clip: true
 
-            // The last good thumbnail stays underneath while a refresh loads.
-            Image {
-                id: previous
+            // Selection ring, a little outside the picture.
+            Rectangle {
                 anchors.fill: parent
-                anchors.margins: 1
-                sourceSize: image.sourceSize
-                fillMode: Image.PreserveAspectFit
-                cache: true  // URLs change per refresh; lets "previous" reuse the pixmap
-                smooth: true
-                visible: !image.hasFrame
+                anchors.margins: -4
+                radius: Theme.cardRadius
+                color: "transparent"
+                border.width: 3
+                border.color: Theme.accent
+                opacity: card.selected ? 1 : 0
+                scale: card.selected ? 1 : 1.03
+                Behavior on opacity { NumberAnimation { duration: Theme.fast } }
+                Behavior on scale { NumberAnimation { duration: Theme.normal; easing.type: Easing.OutCubic } }
             }
-            Image {
-                id: image
+
+            RoundedClip {
+                id: frame
                 anchors.fill: parent
-                anchors.margins: 1
-                source: card.thumbnail
-                sourceSize: Qt.size(400, 225)
-                fillMode: Image.PreserveAspectFit
-                asynchronous: true
-                cache: true  // URLs change per refresh; lets "previous" reuse the pixmap
-                smooth: true
-                // The provider sends a 1x1 image when the source has no frame.
-                readonly property bool hasFrame: status === Image.Ready && implicitWidth > 1
-                opacity: hasFrame ? 1 : 0
-                Behavior on opacity { NumberAnimation { duration: 180 } }
-                onStatusChanged: {
-                    if (status === Image.Ready) previous.source = hasFrame ? source : ""  // "" once minimized
+                radius: Theme.radius - 2
+
+                Rectangle { anchors.fill: parent; color: Theme.mediaBackground }
+
+                // The last good thumbnail stays underneath while a refresh loads.
+                Image {
+                    id: previous
+                    anchors.fill: parent
+                    sourceSize: image.sourceSize
+                    fillMode: Image.PreserveAspectFit
+                    cache: true  // URLs change per refresh; lets "previous" reuse the pixmap
+                    smooth: true
+                    visible: !image.hasFrame
+                }
+                Image {
+                    id: image
+                    anchors.fill: parent
+                    source: card.thumbnail
+                    sourceSize: Qt.size(400, 225)
+                    fillMode: Image.PreserveAspectFit
+                    asynchronous: true
+                    cache: true  // URLs change per refresh; lets "previous" reuse the pixmap
+                    smooth: true
+                    // The provider sends a 1x1 image when the source has no frame.
+                    readonly property bool hasFrame: status === Image.Ready && implicitWidth > 1
+                    opacity: hasFrame ? 1 : 0
+                    Behavior on opacity { NumberAnimation { duration: 180 } }
+                    onStatusChanged: {
+                        if (status === Image.Ready) previous.source = hasFrame ? source : ""  // "" once minimized
+                    }
                 }
             }
 
@@ -72,7 +90,7 @@ AbstractButton {
                 Icon {
                     anchors.horizontalCenter: parent.horizontalCenter
                     glyph: card.kind === "monitor" ? Theme.iconMonitor : Theme.iconWindow
-                    size: 28
+                    size: 26
                     color: Theme.textFaint
                 }
                 Text {
@@ -86,13 +104,15 @@ AbstractButton {
         }
 
         Column {
-            width: frame.width
-            spacing: 2
+            width: frameArea.width
+            topPadding: 2
+            spacing: 1
             Text {
                 width: parent.width
                 text: card.title
                 elide: Text.ElideRight
-                color: Theme.text
+                horizontalAlignment: Text.AlignHCenter
+                color: card.selected ? Theme.accent : Theme.text
                 font.family: Theme.fontFamily
                 font.pixelSize: 13
                 font.weight: Font.DemiBold
@@ -101,6 +121,7 @@ AbstractButton {
                 width: parent.width
                 text: card.subtitle
                 elide: Text.ElideRight
+                horizontalAlignment: Text.AlignHCenter
                 color: Theme.textDim
                 font.family: Theme.fontFamily
                 font.pixelSize: 11

@@ -28,8 +28,8 @@ Window {
     Rectangle {
         anchors.fill: parent
         radius: height / 2
-        color: Qt.rgba(0.086, 0.094, 0.122, 0.94)
-        border.color: Theme.border
+        color: Theme.hud
+        border.color: Qt.rgba(1, 1, 1, 0.08)
 
         Row {
             anchors.verticalCenter: parent.verticalCenter
@@ -47,7 +47,7 @@ Window {
                     spacing: 3
                     Repeater {
                         model: 6
-                        Rectangle { width: 3; height: 3; radius: 1.5; color: Theme.textFaint }
+                        Rectangle { width: 3; height: 3; radius: 1.5; color: Qt.rgba(1, 1, 1, 0.3) }
                     }
                 }
                 MouseArea {
@@ -62,7 +62,7 @@ Window {
                 width: 10
                 height: 10
                 radius: 5
-                color: recorder.paused || recorder.replayMode ? Theme.accent : Theme.record
+                color: recorder.replayMode ? Theme.accent : recorder.paused ? Theme.warning : Theme.record
                 property real blink: 1
                 opacity: recorder.state === "recording" ? blink : 1
                 SequentialAnimation on blink {
@@ -78,9 +78,10 @@ Window {
                 width: 84
                 text: recorder.replayMode ? Theme.formatTime(recorder.replayBufferedSeconds * 1000)
                                           : Theme.formatTime(recorder.elapsedMs)
-                color: Theme.text
-                font.family: Theme.monoFont
-                font.pixelSize: 15
+                color: Theme.hudText
+                font.family: Theme.displayFont
+                font.pixelSize: 16
+                font.features: { "tnum": 1 }
             }
 
             IconButton {
@@ -88,7 +89,9 @@ Window {
                 width: 32
                 height: 32
                 glyph: recorder.replayMode ? Theme.iconSave : recorder.paused ? Theme.iconPlay : Theme.iconPause
-                iconColor: recorder.replayMode ? Theme.accent : Theme.text
+                iconColor: recorder.replayMode ? Theme.accent : Theme.hudText
+                round: true
+                onHud: true
                 tip: recorder.replayMode ? qsTr("리플레이 저장") : recorder.paused ? qsTr("다시 시작") : qsTr("일시정지")
                 enabled: recorder.active
                 onClicked: recorder.replayMode ? recorder.saveReplay() : recorder.togglePause()
@@ -99,6 +102,8 @@ Window {
                 height: 32
                 glyph: Theme.iconStop
                 iconColor: Theme.record
+                round: true
+                onHud: true
                 tip: qsTr("정지")
                 enabled: recorder.active
                 onClicked: recorder.stop()

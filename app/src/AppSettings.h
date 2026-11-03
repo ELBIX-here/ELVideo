@@ -44,6 +44,7 @@ class AppSettings : public QObject {
     Q_PROPERTY(bool hideWindowWhileRecording MEMBER hideWindowWhileRecording NOTIFY changed)
     Q_PROPERTY(bool showFloatingBar MEMBER showFloatingBar NOTIFY changed)
     Q_PROPERTY(bool closeToTray MEMBER closeToTray NOTIFY changed)
+    Q_PROPERTY(QString appearance MEMBER appearance NOTIFY changed)  // "system" | "light" | "dark"
     Q_PROPERTY(QString lastSource MEMBER lastSource NOTIFY changed)
     Q_PROPERTY(QString defaultOutputDir READ defaultOutputDir CONSTANT)
     Q_PROPERTY(QString filePath READ filePath CONSTANT)
@@ -97,6 +98,7 @@ public:
     bool hideWindowWhileRecording = true;
     bool showFloatingBar = true;
     bool closeToTray = true;
+    QString appearance = QStringLiteral("system");
     QString lastSource;
 
     static constexpr auto kDefaultStartStop = "Ctrl+Shift+F9";

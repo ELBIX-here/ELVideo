@@ -7,31 +7,32 @@ import QtQuick.Layouts
 Item {
     id: page
 
+    // A titled group: small gray heading, then rows on one rounded panel.
     component Section: ColumnLayout {
         id: section
         property string title
         default property alias rows: body.data
         Layout.fillWidth: true
-        spacing: 10
+        spacing: 6
         Text {
+            Layout.leftMargin: 16
             text: section.title
-            color: Theme.accent
+            color: Theme.textDim
             font.family: Theme.fontFamily
             font.pixelSize: 12
             font.weight: Font.DemiBold
-            font.letterSpacing: 1.5
         }
         Rectangle {
             Layout.fillWidth: true
-            implicitHeight: body.implicitHeight + 32
-            radius: Theme.radius + 2
+            implicitHeight: body.implicitHeight
+            radius: Theme.cardRadius
             color: Theme.surface
-            border.color: Theme.border
+            border.color: Theme.dark ? "transparent" : Theme.border
             ColumnLayout {
                 id: body
-                anchors.fill: parent
-                anchors.margins: 16
-                spacing: 16
+                anchors.left: parent.left
+                anchors.right: parent.right
+                spacing: 0
             }
         }
     }
@@ -51,7 +52,7 @@ Item {
     Component.onCompleted: reloadDevices()
 
     // "Windows default (name)" first, then each device; value is the device id ("" = default).
-    component DeviceBox: ComboBox {
+    component DeviceBox: AppComboBox {
         id: box
         property var devices: []
         property string deviceId
@@ -82,7 +83,7 @@ Item {
         property int value
         signal moved(int value)
         spacing: 8
-        Slider {
+        AppSlider {
             id: slider
             width: 180
             from: 0
@@ -122,8 +123,23 @@ Item {
         ScrollBar.horizontal.policy: ScrollBar.AlwaysOff
 
         ColumnLayout {
-            width: scroll.availableWidth - 12
-            spacing: 24
+            width: Math.min(scroll.availableWidth - 12, 760)
+            x: Math.max(0, (scroll.availableWidth - 12 - width) / 2)
+            spacing: 22
+
+            Section {
+                title: qsTr("화면 모드")
+                SettingRow {
+                    label: qsTr("모양")
+                    description: qsTr("시스템을 고르면 Windows의 밝은/어두운 모드를 따라갑니다.")
+                    SegmentedControl {
+                        readonly property var keys: ["system", "light", "dark"]
+                        segments: [{ text: qsTr("시스템") }, { text: qsTr("라이트") }, { text: qsTr("다크") }]
+                        currentIndex: Math.max(0, keys.indexOf(appSettings.appearance))
+                        onActivated: index => appSettings.appearance = keys[index]
+                    }
+                }
+            }
 
             Section {
                 title: qsTr("저장")
@@ -132,11 +148,11 @@ Item {
                     description: desktop.nativePath(page.outputDir)
                     Row {
                         spacing: 8
-                        Button {
+                        AppButton {
                             text: qsTr("변경…")
                             onClicked: folderDialog.open()
                         }
-                        Button {
+                        AppButton {
                             text: qsTr("열기")
                             onClicked: desktop.openFolder(page.outputDir)
                         }
@@ -150,7 +166,7 @@ Item {
                     description: appSettings.container === "mp4"
                                  ? qsTr("일반 MP4. 녹화 중 앱이 비정상 종료되면 파일을 재생할 수 없습니다.")
                                  : qsTr("조각난 MP4(fMP4). 비정상 종료되어도 그때까지 녹화된 부분이 남습니다.")
-                    ComboBox {
+                    AppComboBox {
                         width: 200
                         model: [qsTr("fMP4 (권장)"), "MP4"]
                         currentIndex: appSettings.container === "mp4" ? 1 : 0
@@ -166,7 +182,7 @@ Item {
                     description: Object.keys(recorder.codecSupport).length === 0
                                  ? qsTr("이 PC에서 쓸 수 있는 코덱을 확인하는 중…")
                                  : qsTr("HEVC는 같은 화질에서 파일이 작지만 일부 프로그램에서 재생되지 않을 수 있습니다. 주 모니터의 GPU로 시험한 결과입니다.")
-                    ComboBox {
+                    AppComboBox {
                         id: codecBox
                         width: 340
                         readonly property var keys: ["h264", "hevc", "av1"]
@@ -181,20 +197,13 @@ Item {
                             target: appSettings
                             function onChanged() { codecBox.sync() }
                         }
-                        delegate: ItemDelegate {
-                            required property int index
-                            required property var modelData
-                            width: codecBox.width
-                            text: modelData
-                            enabled: !codecBox.support[codecBox.keys[index]] || codecBox.support[codecBox.keys[index]].supported
-                            highlighted: codecBox.highlightedIndex === index
-                        }
+                        itemEnabled: index => !support[keys[index]] || support[keys[index]].supported
                         onActivated: index => appSettings.codec = keys[index]
                     }
                 }
                 SettingRow {
                     label: qsTr("프레임 속도")
-                    ComboBox {
+                    AppComboBox {
                         width: 200
                         readonly property var values: [24, 30, 60, 120]
                         model: values.map(v => v + " fps")
@@ -205,7 +214,7 @@ Item {
                 SettingRow {
                     label: qsTr("비트레이트")
                     description: qsTr("1080p60은 12 Mbps, 1440p60은 20 Mbps, 4K60은 40 Mbps 정도를 권장합니다.")
-                    SpinBox {
+                    AppSpinBox {
                         width: 200
                         from: 1
                         to: 150
@@ -298,7 +307,7 @@ Item {
                     visible: appSettings.captureSystemAudio || appSettings.captureMicrophone
                     label: qsTr("오디오 비트레이트")
                     description: qsTr("AAC 48 kHz 스테레오")
-                    ComboBox {
+                    AppComboBox {
                         width: 200
                         readonly property var values: [96, 128, 160, 192]
                         model: values.map(v => v + " kbps")
@@ -324,7 +333,7 @@ Item {
                 SettingRow {
                     visible: appSettings.webcamEnabled
                     label: qsTr("카메라")
-                    ComboBox {
+                    AppComboBox {
                         id: cameraBox
                         width: 340
                         readonly property var entries: {
@@ -345,7 +354,7 @@ Item {
                 SettingRow {
                     visible: appSettings.webcamEnabled
                     label: qsTr("위치")
-                    ComboBox {
+                    AppComboBox {
                         width: 200
                         model: [qsTr("왼쪽 위"), qsTr("오른쪽 위"), qsTr("왼쪽 아래"), qsTr("오른쪽 아래")]
                         currentIndex: appSettings.webcamCorner
@@ -358,7 +367,7 @@ Item {
                     description: qsTr("녹화 화면 너비 대비")
                     Row {
                         spacing: 8
-                        Slider {
+                        AppSlider {
                             id: camSize
                             width: 180
                             from: 10
@@ -406,11 +415,11 @@ Item {
                             checked: appSettings.screenshotSave
                             onToggled: appSettings.screenshotSave = checked
                         }
-                        Button {
+                        AppButton {
                             text: qsTr("변경…")
                             onClicked: shotFolderDialog.open()
                         }
-                        Button {
+                        AppButton {
                             text: qsTr("열기")
                             onClicked: desktop.openFolder(appSettings.screenshotDir || appSettings.defaultScreenshotDir)
                         }
@@ -418,7 +427,7 @@ Item {
                 }
                 SettingRow {
                     label: qsTr("이미지 형식")
-                    ComboBox {
+                    AppComboBox {
                         width: 200
                         model: ["PNG", qsTr("JPG (작은 파일)")]
                         currentIndex: appSettings.screenshotFormat === "jpg" ? 1 : 0
@@ -435,7 +444,7 @@ Item {
                 SettingRow {
                     label: qsTr("지연")
                     description: qsTr("메뉴나 툴팁처럼 사라지는 화면을 찍을 때 씁니다.")
-                    ComboBox {
+                    AppComboBox {
                         width: 200
                         readonly property var values: [0, 3, 5, 10]
                         model: values.map(v => v === 0 ? qsTr("없음") : v + qsTr("초"))
@@ -450,7 +459,7 @@ Item {
                 SettingRow {
                     label: qsTr("보관할 길이")
                     description: qsTr("녹화 바의 리플레이 버튼으로 켜면 최근 이만큼을 메모리에 두었다가, 저장할 때 파일로 씁니다(H.264, fMP4). 키프레임 위치 때문에 최대 2초 더 길게 저장될 수 있습니다.")
-                    SpinBox {
+                    AppSpinBox {
                         width: 200
                         from: 5
                         to: 600
@@ -500,17 +509,10 @@ Item {
                         onEdited: s => appSettings.hotkeyReplay = s
                     }
                 }
-                RowLayout {
-                    Layout.fillWidth: true
-                    Text {
-                        Layout.fillWidth: true
-                        text: qsTr("필드를 누른 뒤 키 조합을 입력하세요. Backspace는 해제, Esc는 취소입니다.")
-                        color: Theme.textFaint
-                        font.family: Theme.fontFamily
-                        font.pixelSize: 11
-                        wrapMode: Text.Wrap
-                    }
-                    Button {
+                SettingRow {
+                    label: qsTr("기본값으로 되돌리기")
+                    description: qsTr("필드를 누른 뒤 키 조합을 입력하세요. Backspace는 해제, Esc는 취소입니다.")
+                    AppButton {
                         text: qsTr("기본값")
                         onClicked: appSettings.resetHotkeys()
                     }

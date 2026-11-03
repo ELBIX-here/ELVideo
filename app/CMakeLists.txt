@@ -79,6 +79,16 @@ qt_add_qml_module(elv_app
         qml/PreviewPanel.qml
         qml/ScreenshotOverlay.qml
         qml/LibraryPage.qml
+        qml/AppButton.qml
+        qml/AppComboBox.qml
+        qml/AppSlider.qml
+        qml/AppSpinBox.qml
+        qml/AppMenu.qml
+        qml/AppMenuItem.qml
+        qml/SegmentedControl.qml
+        qml/RoundedClip.qml
+        qml/HudButton.qml
+        qml/AppMenuSeparator.qml
         ${ELV_PLAYER_QML}
 )
 

@@ -32,10 +32,10 @@ bool Desktop::excludeFromCapture(QWindow* window) const {
     return SetWindowDisplayAffinity(hwnd, WDA_MONITOR) != FALSE;
 }
 
-void Desktop::useDarkTitleBar(QWindow* window) const {
+void Desktop::useDarkTitleBar(QWindow* window, bool dark) const {
     if (!window) return;
-    const BOOL dark = TRUE;
-    DwmSetWindowAttribute(reinterpret_cast<HWND>(window->winId()), DWMWA_USE_IMMERSIVE_DARK_MODE, &dark, sizeof(dark));
+    const BOOL value = dark ? TRUE : FALSE;
+    DwmSetWindowAttribute(reinterpret_cast<HWND>(window->winId()), DWMWA_USE_IMMERSIVE_DARK_MODE, &value, sizeof(value));
 }
 
 void Desktop::openFile(const QString& path) const { QDesktopServices::openUrl(QUrl::fromLocalFile(path)); }

@@ -18,7 +18,7 @@ public:
     // WDA_MONITOR, which shows the window as black. Returns false if both fail.
     Q_INVOKABLE bool excludeFromCapture(QWindow* window) const;
     // Dark title bar to match the app, regardless of the system theme.
-    Q_INVOKABLE void useDarkTitleBar(QWindow* window) const;
+    Q_INVOKABLE void useDarkTitleBar(QWindow* window, bool dark = true) const;
 
     Q_INVOKABLE void openFile(const QString& path) const;
     // Opens a video in ELVideo's player (a separate process); empty: just the player.

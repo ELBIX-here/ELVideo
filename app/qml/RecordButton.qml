@@ -1,12 +1,14 @@
 import QtQuick
 import QtQuick.Controls
 
-// Round red button: a dot while idle, a rounded square while recording.
+// Record button in the style of the system recorders: a ring around a red dot
+// that morphs into a rounded square while recording.
 AbstractButton {
     id: control
 
     property bool recording
-    property real diameter: 52
+    property real diameter: 54
+    property bool onHud: false
 
     implicitWidth: diameter
     implicitHeight: diameter
@@ -15,46 +17,26 @@ AbstractButton {
 
     background: Rectangle {
         radius: width / 2
-        color: control.down ? Qt.darker(Theme.record, 1.25) : control.hovered ? Qt.lighter(Theme.record, 1.12) : Theme.record
+        color: "transparent"
+        border.width: 3
+        border.color: control.visualFocus ? Theme.accent
+                    : control.onHud ? Qt.rgba(1, 1, 1, 0.35) : Theme.dark ? "#5A5A5E" : "#D1D1D6"
         opacity: control.enabled ? 1 : 0.4
-        border.width: control.visualFocus ? 2 : 0
-        border.color: Theme.text
-        Behavior on color { ColorAnimation { duration: 100 } }
-
-        // Soft pulse ring while recording.
-        Rectangle {
-            anchors.centerIn: parent
-            width: parent.width
-            height: width
-            radius: width / 2
-            color: "transparent"
-            border.color: Theme.record
-            border.width: 2
-            visible: control.recording
-            SequentialAnimation on scale {
-                running: control.recording
-                loops: Animation.Infinite
-                NumberAnimation { from: 1; to: 1.35; duration: 1100; easing.type: Easing.OutCubic }
-                PauseAnimation { duration: 300 }
-            }
-            SequentialAnimation on opacity {
-                running: control.recording
-                loops: Animation.Infinite
-                NumberAnimation { from: 0.8; to: 0; duration: 1100; easing.type: Easing.OutCubic }
-                PauseAnimation { duration: 300 }
-            }
-        }
     }
 
     contentItem: Item {
         Rectangle {
             anchors.centerIn: parent
-            width: control.recording ? control.diameter * 0.34 : control.diameter * 0.36
+            width: control.recording ? control.diameter * 0.40 : control.diameter - 14
             height: width
-            radius: control.recording ? 4 : width / 2
-            color: Theme.text
-            Behavior on radius { NumberAnimation { duration: 150 } }
-            Behavior on width { NumberAnimation { duration: 150 } }
+            radius: control.recording ? 6 : width / 2
+            color: control.down ? Qt.darker(Theme.record, 1.2) : control.hovered ? Qt.lighter(Theme.record, 1.08) : Theme.record
+            opacity: control.enabled ? 1 : 0.4
+            Behavior on width { NumberAnimation { duration: Theme.normal; easing.type: Easing.OutBack; easing.overshoot: 1.4 } }
+            Behavior on radius { NumberAnimation { duration: Theme.normal; easing.type: Easing.OutCubic } }
+            Behavior on color { ColorAnimation { duration: Theme.fast } }
         }
     }
+    scale: down ? 0.95 : 1
+    Behavior on scale { NumberAnimation { duration: Theme.fast } }
 }

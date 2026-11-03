@@ -1,8 +1,10 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
+import QtQuick.Effects
 
-// Message strip at the bottom of the main window: "saved" with file actions, or an error.
+// Notification banner above the record bar: "saved" with file actions, or an
+// error. Slides up and fades in; stays while the mouse is over it.
 Rectangle {
     id: toast
 
@@ -48,12 +50,21 @@ Rectangle {
     property bool shown: false
 
     implicitHeight: row.implicitHeight + 20
-    radius: Theme.radius
+    radius: Theme.cardRadius
     color: Theme.surfaceRaised
-    border.color: isError ? Theme.danger : isWarning ? Theme.accent : Theme.border
+    border.color: Theme.dark ? Theme.border : "transparent"
     opacity: shown ? 1 : 0
     visible: opacity > 0
-    Behavior on opacity { NumberAnimation { duration: 180 } }
+    transform: Translate { y: toast.shown ? 0 : 10; Behavior on y { NumberAnimation { duration: Theme.normal; easing.type: Easing.OutCubic } } }
+    Behavior on opacity { NumberAnimation { duration: Theme.normal } }
+    layer.enabled: !Theme.dark
+    layer.effect: MultiEffect {
+        shadowEnabled: true
+        shadowColor: Theme.shadow
+        shadowBlur: 0.8
+        shadowVerticalOffset: 2
+        autoPaddingEnabled: true
+    }
 
     Timer {
         id: hideTimer
@@ -71,9 +82,18 @@ Rectangle {
         anchors.rightMargin: 6
         spacing: 10
 
-        Icon {
-            glyph: toast.isError || toast.isWarning ? Theme.iconWarning : Theme.iconCheck
-            color: toast.isError ? Theme.danger : toast.isWarning ? Theme.accent : Theme.success
+        // Symbol in a tinted circle.
+        Rectangle {
+            Layout.preferredWidth: 26
+            Layout.preferredHeight: 26
+            radius: 13
+            color: toast.isError ? Theme.danger : toast.isWarning ? Theme.warning : Theme.success
+            Icon {
+                anchors.centerIn: parent
+                glyph: toast.isError || toast.isWarning ? "" : Theme.iconCheck
+                size: 12
+                color: "#FFFFFF"
+            }
         }
         ColumnLayout {
             Layout.fillWidth: true
@@ -96,24 +116,28 @@ Rectangle {
                 elide: Text.ElideMiddle
             }
         }
-        Button {
+        AppButton {
             visible: toast.folderPath.length > 0
             text: qsTr("폴더 열기")
             onClicked: desktop.openFolder(toast.folderPath)
         }
-        Button {
+        AppButton {
             visible: toast.filePath.length > 0
+            primary: true
             text: toast.openLabel
             onClicked: toast.video ? desktop.openInPlayer(toast.filePath) : desktop.openFile(toast.filePath)
         }
-        Button {
+        AppButton {
             visible: toast.filePath.length > 0
             text: qsTr("폴더에서 보기")
             onClicked: desktop.revealFile(toast.filePath)
         }
         IconButton {
             glyph: Theme.iconClose
-            iconSize: 12
+            iconSize: 11
+            round: true
+            implicitWidth: 28
+            implicitHeight: 28
             tip: qsTr("닫기")
             onClicked: toast.shown = false
         }

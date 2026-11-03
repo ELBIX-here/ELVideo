@@ -29,20 +29,20 @@ Item {
         height: area.containsMouse || bar.dragging ? 6 : 4
         radius: height / 2
         color: Qt.rgba(1, 1, 1, 0.22)
-        Behavior on height { NumberAnimation { duration: 100 } }
+        Behavior on height { NumberAnimation { duration: Theme.fast } }
 
         Rectangle {  // A-B loop range
             visible: bar.player && bar.player.loopA >= 0
             x: bar.xAt(bar.player ? bar.player.loopA : 0)
             width: bar.player && bar.player.loopB >= 0 ? bar.xAt(bar.player.loopB) - x : 3
             height: parent.height
-            color: Qt.rgba(0.95, 0.66, 0.23, 0.55)
+            color: Qt.rgba(0.039, 0.518, 1, 0.6)
         }
         Rectangle {  // played
             width: bar.xAt(bar.shown)
             height: parent.height
             radius: parent.radius
-            color: Theme.record
+            color: "white"
         }
         Repeater {  // chapters
             model: bar.player ? bar.player.chapters : []
@@ -62,7 +62,7 @@ Item {
         width: 14
         height: 14
         radius: 7
-        color: Theme.text
+        color: "white"
     }
 
     // Preview above the cursor: a frame near the hovered time (keyframe) and the time.
@@ -76,18 +76,22 @@ Item {
         y: -height - 8
         width: hasFrame ? seekThumbs.thumbWidth + 6 : tip.implicitWidth + 14
         height: hasFrame ? seekThumbs.thumbHeight + 30 : 24
-        radius: 6
-        color: Theme.surface
-        border.color: Theme.border
-        Image {
+        radius: 10
+        color: Theme.hud
+        border.color: Qt.rgba(1, 1, 1, 0.12)
+        RoundedClip {
             visible: preview.hasFrame
             x: 3
             y: 3
             width: seekThumbs.thumbWidth
             height: seekThumbs.thumbHeight
-            source: seekThumbs.source
-            cache: false
-            asynchronous: false
+            radius: 7
+            Image {
+                anchors.fill: parent
+                source: seekThumbs.source
+                cache: false
+                asynchronous: false
+            }
         }
         Text {
             id: tip
@@ -95,9 +99,11 @@ Item {
             anchors.bottom: parent.bottom
             anchors.bottomMargin: 4
             text: bar.format(preview.tipTime)
-            color: Theme.text
-            font.family: Theme.monoFont
+            color: Theme.hudText
+            font.family: Theme.fontFamily
             font.pixelSize: 12
+            font.weight: Font.DemiBold
+            font.features: { "tnum": 1 }
         }
     }
 

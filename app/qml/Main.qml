@@ -13,7 +13,7 @@ ApplicationWindow {
     title: qsTr("ELVideo")
     color: Theme.background
 
-    // Dark palette for the Basic style controls.
+    // Palette for the Basic style controls that are not restyled (menus, tooltips, scroll bars).
     palette.window: Theme.background
     palette.windowText: Theme.text
     palette.base: Theme.surfaceRaised
@@ -23,12 +23,12 @@ ApplicationWindow {
     palette.buttonText: Theme.text
     palette.brightText: Theme.text
     palette.highlight: Theme.accent
-    palette.highlightedText: Theme.background
+    palette.highlightedText: Theme.accentText
     palette.light: Theme.surfaceHover
     palette.midlight: Theme.surfaceHover
     palette.mid: Theme.border
     palette.dark: Theme.textFaint
-    palette.shadow: "#000000"
+    palette.shadow: Theme.shadow
     palette.toolTipBase: Theme.surfaceRaised
     palette.toolTipText: Theme.text
     palette.placeholderText: Theme.textFaint
@@ -54,8 +54,14 @@ ApplicationWindow {
         sources.refresh()
     }
 
+    Binding { target: Theme; property: "appearance"; value: appSettings.appearance }
+    Connections {
+        target: Theme
+        function onDarkChanged() { desktop.useDarkTitleBar(root, Theme.dark) }
+    }
+
     Component.onCompleted: {
-        desktop.useDarkTitleBar(root)
+        desktop.useDarkTitleBar(root, Theme.dark)
         desktop.excludeFromCapture(root)
     }
 
@@ -113,17 +119,19 @@ ApplicationWindow {
         Component.onCompleted: desktop.excludeFromCapture(countdownWindow)
         Rectangle {
             anchors.fill: parent
-            radius: width / 2
-            color: Qt.rgba(0.086, 0.094, 0.122, 0.9)
-            border.color: Theme.accent
-            border.width: 3
+            radius: 28
+            color: Theme.hud
             Text {
                 anchors.centerIn: parent
                 text: countdownWindow.seconds
-                color: Theme.text
-                font.family: Theme.fontFamily
-                font.pixelSize: 52
-                font.weight: Font.DemiBold
+                color: Theme.hudText
+                font.family: Theme.displayFont
+                font.pixelSize: 60
+                font.weight: Font.Light
+                // A gentle pop on every tick.
+                scale: 1
+                onTextChanged: tick.restart()
+                NumberAnimation on scale { id: tick; from: 1.25; to: 1; duration: 300; easing.type: Easing.OutCubic }
             }
         }
     }
@@ -201,9 +209,10 @@ ApplicationWindow {
     ColumnLayout {
         anchors.fill: parent
         anchors.margins: 20
+        anchors.topMargin: 16
         spacing: 16
 
-        // Header
+        // Header: app mark and title on the left, the page's toolbar buttons on the right.
         RowLayout {
             Layout.fillWidth: true
             spacing: 10
@@ -212,15 +221,20 @@ ApplicationWindow {
                 Layout.preferredHeight: 30
             }
             Text {
-                text: "ELVIDEO"
+                text: "ELVideo"
                 color: Theme.text
-                font.family: Theme.fontFamily
-                font.pixelSize: 16
+                font.family: Theme.displayFont
+                font.pixelSize: 19
                 font.weight: Font.DemiBold
-                font.letterSpacing: 5
+            }
+            Rectangle {
+                Layout.leftMargin: 2
+                Layout.preferredWidth: 1
+                Layout.preferredHeight: 16
+                color: Theme.separator
             }
             Text {
-                Layout.leftMargin: 6
+                Layout.leftMargin: 2
                 text: recorder.replayMode ? qsTr("리플레이 버퍼") : recorder.active ? qsTr("녹화 중")
                     : root.showLibrary ? qsTr("라이브러리") : root.showSettings ? qsTr("설정") : qsTr("녹화할 화면을 고르세요")
                 color: Theme.textDim
@@ -238,7 +252,7 @@ ApplicationWindow {
             IconButton {
                 glyph: Theme.iconLibrary
                 tip: qsTr("라이브러리")
-                iconColor: root.showLibrary ? Theme.accent : Theme.text
+                checkedLook: root.showLibrary
                 onClicked: {
                     root.showLibrary = !root.showLibrary
                     root.showSettings = false
@@ -251,8 +265,9 @@ ApplicationWindow {
                 onClicked: desktop.openInPlayer()
             }
             IconButton {
-                glyph: root.showSettings ? Theme.iconBack : Theme.iconSettings
-                tip: root.showSettings ? qsTr("돌아가기") : qsTr("설정")
+                glyph: Theme.iconSettings
+                tip: root.showSettings ? qsTr("설정 닫기") : qsTr("설정")
+                checkedLook: root.showSettings
                 onClicked: {
                     root.showSettings = !root.showSettings
                     root.showLibrary = false
@@ -261,9 +276,18 @@ ApplicationWindow {
         }
 
         StackLayout {
+            id: pages
             Layout.fillWidth: true
             Layout.fillHeight: true
             currentIndex: recorder.active ? 2 : root.showLibrary ? 3 : root.showSettings ? 1 : 0
+            // Pages cross-fade in with a slight rise.
+            onCurrentIndexChanged: pageIn.restart()
+            ParallelAnimation {
+                id: pageIn
+                NumberAnimation { target: pages; property: "opacity"; from: 0; to: 1; duration: Theme.normal; easing.type: Easing.OutCubic }
+                NumberAnimation { target: pageShift; property: "y"; from: 8; to: 0; duration: Theme.normal; easing.type: Easing.OutCubic }
+            }
+            transform: Translate { id: pageShift }
             SourcePicker {
                 onRegionRequested: root.selectRegion()
             }

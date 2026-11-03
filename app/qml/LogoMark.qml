@@ -55,6 +55,23 @@ Item {
         Rectangle { x: 156; y: 58; width: 200; height: 16; radius: 8; color: root.paper; antialiasing: true }
         Rectangle { x: 156; y: 438; width: 200; height: 16; radius: 8; color: root.paper; antialiasing: true }
 
+        // Film running from the upper reel's edge into the lower reel. It lies under
+        // both reels, so the turning reels' holes never show it through.
+        Rectangle {
+            readonly property real x1: 256 - 44 * root.topRadius / 46
+            readonly property real y1: 168 + 8 * root.topRadius / 46
+            readonly property real x2: 300
+            readonly property real y2: 336
+            width: Math.hypot(x2 - x1, y2 - y1) + 10
+            height: 10
+            radius: 5
+            x: (x1 + x2) / 2 - width / 2
+            y: (y1 + y2) / 2 - height / 2
+            rotation: Math.atan2(y2 - y1, x2 - x1) * 180 / Math.PI
+            color: root.amber
+            antialiasing: true
+        }
+
         // Upper (supply) reel.
         Item {
             x: 256
@@ -77,22 +94,6 @@ Item {
             Disc { cx: -35; cy: 20; r: 11; color: root.ink }
             Disc { cx: 35; cy: 20; r: 11; color: root.ink }
             Disc { cx: 0; cy: 0; r: 12; color: root.paper }
-        }
-
-        // Film running from the upper reel's edge into the lower reel.
-        Rectangle {
-            readonly property real x1: 256 - 44 * root.topRadius / 46
-            readonly property real y1: 168 + 8 * root.topRadius / 46
-            readonly property real x2: 300
-            readonly property real y2: 336
-            width: Math.hypot(x2 - x1, y2 - y1) + 10
-            height: 10
-            radius: 5
-            x: (x1 + x2) / 2 - width / 2
-            y: (y1 + y2) / 2 - height / 2
-            rotation: Math.atan2(y2 - y1, x2 - x1) * 180 / Math.PI
-            color: root.amber
-            antialiasing: true
         }
 
         // SVG strokes are centered on the path; Rectangle borders sit inside.

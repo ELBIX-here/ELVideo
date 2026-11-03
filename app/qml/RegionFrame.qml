@@ -24,6 +24,6 @@ Window {
         color: "transparent"
         border.color: Theme.record
         border.width: 2
-        radius: 2
+        radius: 3
     }
 }

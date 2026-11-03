@@ -115,6 +115,8 @@ void AppSettings::load() {
     hideWindowWhileRecording = value(j, "hideWindowWhileRecording", hideWindowWhileRecording);
     showFloatingBar = value(j, "showFloatingBar", showFloatingBar);
     closeToTray = value(j, "closeToTray", closeToTray);
+    appearance = str(j, "appearance", appearance);
+    if (appearance != QLatin1String("light") && appearance != QLatin1String("dark")) appearance = QStringLiteral("system");
     lastSource = str(j, "lastSource", lastSource);
     emit changed();
     loading_ = false;
@@ -157,6 +159,7 @@ void AppSettings::save() {
         {"hideWindowWhileRecording", hideWindowWhileRecording},
         {"showFloatingBar", showFloatingBar},
         {"closeToTray", closeToTray},
+        {"appearance", appearance.toStdString()},
         {"lastSource", lastSource.toStdString()},
     };
 

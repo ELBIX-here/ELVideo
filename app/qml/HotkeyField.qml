@@ -12,7 +12,7 @@ AbstractButton {
     readonly property bool editing: activeFocus
 
     implicitWidth: 200
-    implicitHeight: 34
+    implicitHeight: 30
     hoverEnabled: true
     focusPolicy: Qt.StrongFocus
     Accessible.name: sequence
@@ -42,14 +42,17 @@ AbstractButton {
         text: field.editing ? qsTr("키 조합을 누르세요…")
                             : (field.sequence.length > 0 ? field.sequence : qsTr("없음"))
         color: field.editing ? Theme.accent : field.sequence.length > 0 ? Theme.text : Theme.textFaint
-        font.family: field.editing ? Theme.fontFamily : Theme.monoFont
+        font.family: Theme.fontFamily
         font.pixelSize: 13
+        font.weight: field.sequence.length > 0 && !field.editing ? Font.DemiBold : Font.Normal
         horizontalAlignment: Text.AlignHCenter
         verticalAlignment: Text.AlignVCenter
     }
     background: Rectangle {
-        radius: 8
-        color: field.hovered || field.editing ? Theme.surfaceHover : Theme.surfaceRaised
-        border.color: field.editing ? Theme.accent : Theme.border
+        radius: Theme.radius - 2
+        color: field.editing ? Theme.accentSoft : field.hovered && Theme.dark ? Qt.lighter(Theme.control, 1.15) : Theme.control
+        border.width: field.editing ? 2 : 1
+        border.color: field.editing ? Theme.accent : Theme.controlBorder
+        Behavior on color { ColorAnimation { duration: Theme.fast } }
     }
 }

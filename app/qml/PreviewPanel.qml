@@ -19,23 +19,29 @@ Item {
         onTriggered: if (image.status !== Image.Loading) panel.frameNo++
     }
 
+    // Red (paused: orange) ring around the picture.
     Rectangle {
+        anchors.fill: frame
+        anchors.margins: -4
+        radius: Theme.cardRadius + 2
+        color: "transparent"
+        border.width: 3
+        border.color: recorder.paused ? Theme.warning : Theme.record
+    }
+
+    RoundedClip {
         id: frame
         anchors.centerIn: parent
         readonly property real aspect: image.implicitWidth > 0 ? image.implicitWidth / image.implicitHeight : 16 / 9
         width: Math.min(parent.width, (parent.height - caption.height - 12) * aspect)
         height: width / aspect
         anchors.verticalCenterOffset: -(caption.height + 12) / 2
-        radius: Theme.radius
-        color: "#0B0C10"
-        border.color: recorder.paused ? Theme.accent : Theme.record
-        border.width: 2
-        clip: true
+        radius: Theme.cardRadius - 2
 
+        Rectangle { anchors.fill: parent; color: Theme.mediaBackground }
         Image {
             id: image
             anchors.fill: parent
-            anchors.margins: 2
             source: panel.frameNo > 0 ? "image://preview/" + panel.frameNo : ""
             sourceSize: Qt.size(Math.round(width * Screen.devicePixelRatio), Math.round(height * Screen.devicePixelRatio))
             fillMode: Image.PreserveAspectFit
@@ -56,13 +62,21 @@ Item {
             visible: recorder.paused
             anchors.fill: parent
             color: Qt.rgba(0, 0, 0, 0.45)
-            Text {
+            Rectangle {
                 anchors.centerIn: parent
-                text: qsTr("일시정지됨")
-                color: Theme.accent
-                font.family: Theme.fontFamily
-                font.pixelSize: 20
-                font.weight: Font.DemiBold
+                width: pausedLabel.implicitWidth + 36
+                height: 40
+                radius: 20
+                color: Theme.hud
+                Text {
+                    id: pausedLabel
+                    anchors.centerIn: parent
+                    text: qsTr("일시정지됨")
+                    color: Theme.hudText
+                    font.family: Theme.fontFamily
+                    font.pixelSize: 15
+                    font.weight: Font.DemiBold
+                }
             }
         }
     }

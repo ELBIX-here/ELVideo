@@ -74,8 +74,8 @@ Item {
                 height: overlay.selection.height + 2
                 visible: overlay.selection.width > 0
                 color: "transparent"
-                border.color: Theme.accent
-                border.width: 2
+                border.color: "white"
+                border.width: 1
             }
 
             // Size in physical pixels, as it will be recorded.
@@ -83,36 +83,38 @@ Item {
                 visible: overlay.selection.width > 0
                 x: Math.min(overlay.selection.x, overlay.width - width - 8)
                 y: overlay.selection.y > 34 ? overlay.selection.y - 30 : overlay.selection.y + overlay.selection.height + 6
-                width: sizeLabel.implicitWidth + 16
+                width: sizeLabel.implicitWidth + 18
                 height: 24
-                radius: 6
-                color: Theme.surface
+                radius: 12
+                color: Theme.hud
                 Text {
                     id: sizeLabel
                     anchors.centerIn: parent
                     text: Math.round(overlay.selection.width * overlay.ratio) + " × "
                           + Math.round(overlay.selection.height * overlay.ratio)
-                    color: Theme.text
-                    font.family: Theme.monoFont
-                    font.pixelSize: 13
+                    color: Theme.hudText
+                    font.family: Theme.fontFamily
+                    font.pixelSize: 12
+                    font.weight: Font.DemiBold
+                    font.features: { "tnum": 1 }
                 }
             }
 
             Rectangle {
                 anchors.centerIn: parent
                 visible: !overlay.dragging && overlay.selection.width === 0
-                width: hint.implicitWidth + 40
-                height: 48
-                radius: 12
-                color: Theme.surface
-                border.color: Theme.border
+                width: hint.implicitWidth + 44
+                height: 46
+                radius: 23
+                color: Theme.hud
+                border.color: Qt.rgba(1, 1, 1, 0.08)
                 Text {
                     id: hint
                     anchors.centerIn: parent
                     text: qsTr("드래그해서 녹화할 영역을 고르세요   ·   Esc 취소")
-                    color: Theme.text
+                    color: Theme.hudText
                     font.family: Theme.fontFamily
-                    font.pixelSize: 15
+                    font.pixelSize: 14
                 }
             }
 
