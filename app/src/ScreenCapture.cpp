@@ -33,6 +33,20 @@ QImage toQImage(const elv::Thumbnail& t) {
 
 QString hex(std::uintptr_t v) { return QString::number(static_cast<qulonglong>(v), 16); }
 
+// Nearly all black: what a window gives when it has not drawn its content (e.g. a
+// Citrix desktop viewer that stopped rendering while the overlay covered it).
+bool isBlank(const QImage& image) {
+    if (image.isNull()) return true;
+    const int step = std::max(1, std::min(image.width(), image.height()) / 64);
+    qint64 total = 0, dark = 0;
+    for (int y = 0; y < image.height(); y += step) {
+        const auto* row = reinterpret_cast<const QRgb*>(image.constScanLine(y));
+        for (int x = 0; x < image.width(); x += step, ++total)
+            if (qRed(row[x]) < 12 && qGreen(row[x]) < 12 && qBlue(row[x]) < 12) ++dark;
+    }
+    return dark * 100 >= total * 97;
+}
+
 }  // namespace
 
 ScreenCapture::ScreenCapture(AppSettings& settings, QObject* parent) : QObject(parent), settings_(settings) {}
@@ -243,14 +257,41 @@ void ScreenCapture::captureWindowAt(QWindow* overlay, const QPointF& pos) {
     // The window itself through WGC: complete even where other windows covered it.
     const HWND hwnd = w->hwnd;
     const bool cursor = settings_.screenshotCursor;
+    // Fallback: the window's area of the frozen screen, from the monitor showing most of it.
+    QImage frozenCrop;
+    {
+        std::lock_guard lock(mutex_);
+        int best = 0;
+        for (const auto& [m, f] : frozen_) {
+            RECT part{};
+            if (!IntersectRect(&part, &w->rect, &f.rect)) continue;
+            const int area = (part.right - part.left) * (part.bottom - part.top);
+            if (area <= best) continue;
+            best = area;
+            frozenCrop = f.image.copy(part.left - f.rect.left, part.top - f.rect.top, part.right - part.left,
+                                      part.bottom - part.top);
+        }
+    }
     setActive(false);
     setBusy(true);
-    std::thread([hwnd, cursor, guard = QPointer<ScreenCapture>(this)] {
+    std::thread([hwnd, cursor, frozenCrop = std::move(frozenCrop), guard = QPointer<ScreenCapture>(this)] {
         elv::CaptureSource source;
         source.kind = elv::SourceKind::Window;
         source.handle = reinterpret_cast<std::uintptr_t>(hwnd);
-        const auto image = elv::captureImage(source, std::nullopt, cursor);
-        QImage result = image ? toQImage(*image) : QImage();
+        auto grab = [&] {
+            const auto image = elv::captureImage(source, std::nullopt, cursor);
+            return image ? toQImage(*image) : QImage();
+        };
+        QImage result = grab();
+        if (isBlank(result)) {
+            // Give a window that stopped drawing under the overlay time to repaint.
+            std::this_thread::sleep_for(std::chrono::milliseconds(300));
+            result = grab();
+        }
+        if (isBlank(result) && !isBlank(frozenCrop)) {
+            spdlog::info("window capture came back blank; using the frozen screen");
+            result = frozenCrop;
+        }
         QMetaObject::invokeMethod(qApp, [guard, result = std::move(result)]() mutable {
             if (!guard) return;
             guard->setBusy(false);
