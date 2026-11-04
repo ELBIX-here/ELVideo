@@ -29,6 +29,10 @@ class Settings(context: Context) {
     private val _seekStep = MutableStateFlow(prefs.getInt("seekStep", 10))
     val seekStep: StateFlow<Int> = _seekStep.asStateFlow()
 
+    // Signed in to Google Drive from this app (the token itself is Play services').
+    private val _driveConnected = MutableStateFlow(prefs.getBoolean("driveConnected", false))
+    val driveConnected: StateFlow<Boolean> = _driveConnected.asStateFlow()
+
     private val _folders = MutableStateFlow(readFolders())
     val folders: StateFlow<List<LibraryFolder>> = _folders.asStateFlow()
 
@@ -37,6 +41,8 @@ class Settings(context: Context) {
     fun setAutoNext(v: Boolean) { _autoNext.value = v; prefs.edit().putBoolean("autoNext", v).apply() }
     fun setResume(v: Boolean) { _resume.value = v; prefs.edit().putBoolean("resume", v).apply() }
     fun setSeekStep(v: Int) { _seekStep.value = v; prefs.edit().putInt("seekStep", v).apply() }
+
+    fun setDriveConnected(v: Boolean) { _driveConnected.value = v; prefs.edit().putBoolean("driveConnected", v).apply() }
 
     fun addFolder(folder: LibraryFolder) {
         if (_folders.value.any { it.treeUri == folder.treeUri }) return

@@ -1,6 +1,8 @@
 package io.github.elbix.elvideo
 
+import android.app.Activity
 import android.content.Intent
+import android.widget.Toast
 import android.net.Uri
 import android.os.Bundle
 import android.provider.DocumentsContract
@@ -9,6 +11,7 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -40,7 +43,9 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -54,10 +59,16 @@ import androidx.compose.ui.unit.dp
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewmodel.compose.viewModel
+import kotlinx.coroutines.launch
+import io.github.elbix.elvideo.data.Drive
 import io.github.elbix.elvideo.data.Folders
 import io.github.elbix.elvideo.data.LibraryFolder
 import io.github.elbix.elvideo.player.PlayerActivity
 import io.github.elbix.elvideo.ui.ContinueScreen
+import io.github.elbix.elvideo.ui.DriveBrowser
+import io.github.elbix.elvideo.ui.ElvMenu
+import io.github.elbix.elvideo.ui.ElvMenuItem
+import io.github.elbix.elvideo.ui.LocalConnectDrive
 import io.github.elbix.elvideo.ui.Elv
 import io.github.elbix.elvideo.ui.ElvIcons
 import io.github.elbix.elvideo.ui.ElvTheme
@@ -79,15 +90,18 @@ class NavState : ViewModel() {
     var tab by mutableStateOf(Tab.Continue)
     var folder by mutableStateOf<LibraryFolder?>(null)
     val path = mutableStateListOf<Crumb>()
+    var driveBrowser by mutableStateOf(false)  // choosing a Drive folder to add
 
     fun openFolder(f: LibraryFolder) {
         tab = Tab.Folders
+        driveBrowser = false
         folder = f
         path.clear()
-        path += Crumb(Folders.rootDocId(Uri.parse(f.treeUri)), f.name)
+        path += Crumb(Folders.rootOf(f.treeUri), f.name)
     }
 
     fun back(): Boolean {
+        if (driveBrowser) { driveBrowser = false; return true }
         if (tab == Tab.Folders && path.size > 1) { path.removeAt(path.lastIndex); return true }
         if (tab == Tab.Folders && folder != null) { folder = null; path.clear(); return true }
         if (tab != Tab.Continue) { tab = Tab.Continue; return true }
@@ -144,9 +158,41 @@ private fun MainScreen(nav: NavState = viewModel()) {
     val addFolder = { pickFolder.launch(null) }
     val openFile = { pickFile.launch(arrayOf("video/*")) }
 
-    BackHandler(enabled = nav.tab != Tab.Continue || nav.folder != null) { nav.back() }
+    // Google Drive: sign in (showing Google's consent screen the first time),
+    // then do what was asked.
+    val scope = rememberCoroutineScope()
+    var afterConnect by remember { mutableStateOf<(() -> Unit)?>(null) }
+    val tell = { message: String -> Toast.makeText(context, message, Toast.LENGTH_SHORT).show() }
+    val consent = rememberLauncherForActivityResult(ActivityResultContracts.StartIntentSenderForResult()) { r ->
+        when (val a = Drive.resultFromIntent(context, r.data)) {
+            is Drive.Auth.Granted -> { settings.setDriveConnected(true); afterConnect?.invoke() }
+            is Drive.Auth.Failed -> tell(a.message)
+            is Drive.Auth.NeedsConsent -> tell("로그인을 마치지 못했습니다")
+        }
+        afterConnect = null
+    }
+    val connectDrive: (() -> Unit) -> Unit = { done ->
+        scope.launch {
+            when (val a = Drive.authorize(context as Activity)) {
+                is Drive.Auth.Granted -> { settings.setDriveConnected(true); done() }
+                is Drive.Auth.NeedsConsent -> { afterConnect = done; consent.launch(IntentSenderRequest.Builder(a.intent).build()) }
+                is Drive.Auth.Failed -> tell(a.message)
+            }
+        }
+    }
+    val addDriveFolder = {
+        connectDrive {
+            nav.tab = Tab.Folders
+            nav.folder = null
+            nav.path.clear()
+            nav.driveBrowser = true
+        }
+    }
+
+    BackHandler(enabled = nav.tab != Tab.Continue || nav.folder != null || nav.driveBrowser) { nav.back() }
 
     val c = Elv.colors
+    CompositionLocalProvider(LocalConnectDrive provides connectDrive) {
     BoxWithConstraints(Modifier.fillMaxSize().background(c.background)) {
         val wide = maxWidth >= 600.dp
         val content: @Composable (Modifier) -> Unit = { m ->
@@ -155,7 +201,16 @@ private fun MainScreen(nav: NavState = viewModel()) {
                     Tab.Continue -> ContinueScreen(wide = wide, onBrowse = { nav.tab = Tab.Folders })
                     Tab.Folders -> {
                         val f = nav.folder
-                        if (f != null && nav.path.isNotEmpty()) {
+                        if (nav.driveBrowser) {
+                            DriveBrowser(
+                                onPick = { id, name ->
+                                    val folder = LibraryFolder(Drive.treeUri(id), name)
+                                    settings.addFolder(folder)
+                                    nav.openFolder(folder)
+                                },
+                                onClose = { nav.driveBrowser = false },
+                            )
+                        } else if (f != null && nav.path.isNotEmpty()) {
                             FolderScreen(
                                 folder = f, path = nav.path.toList(), wide = wide,
                                 onOpenSub = { nav.path += it },
@@ -163,7 +218,7 @@ private fun MainScreen(nav: NavState = viewModel()) {
                                 onBack = { nav.back() },
                             )
                         } else {
-                            FoldersScreen(folders = folders, onOpen = nav::openFolder, onAdd = addFolder, onOpenFile = openFile,
+                            FoldersScreen(folders = folders, onOpen = nav::openFolder, onAdd = addFolder, onAddDrive = addDriveFolder, onOpenFile = openFile,
                                 onRemove = { settings.removeFolder(it.treeUri) })
                         }
                     }
@@ -173,7 +228,7 @@ private fun MainScreen(nav: NavState = viewModel()) {
         }
         if (wide) {
             Row(Modifier.fillMaxSize()) {
-                Sidebar(nav, folders, continueCount, addFolder, openFile)
+                Sidebar(nav, folders, continueCount, addFolder, addDriveFolder, openFile)
                 content(Modifier.weight(1f).fillMaxHeight().windowInsetsPadding(WindowInsets.safeDrawing))
             }
         } else {
@@ -182,6 +237,7 @@ private fun MainScreen(nav: NavState = viewModel()) {
                 BottomTabs(nav)
             }
         }
+    }
     }
 }
 
@@ -222,7 +278,7 @@ private fun TabItem(label: String, icon: ImageVector, selected: Boolean, onClick
 
 // Tablets and unfolded foldables: the desktop's sidebar.
 @Composable
-private fun Sidebar(nav: NavState, folders: List<LibraryFolder>, continueCount: Int, onAdd: () -> Unit, onOpenFile: () -> Unit) {
+private fun Sidebar(nav: NavState, folders: List<LibraryFolder>, continueCount: Int, onAdd: () -> Unit, onAddDrive: () -> Unit, onOpenFile: () -> Unit) {
     val c = Elv.colors
     Row(Modifier.fillMaxHeight()) {
         Column(
@@ -241,9 +297,16 @@ private fun Sidebar(nav: NavState, folders: List<LibraryFolder>, continueCount: 
                 Text("폴더", style = Type.fine.copy(fontWeight = FontWeight.SemiBold), color = c.textDim,
                     modifier = Modifier.padding(start = 10.dp, top = 16.dp, bottom = 4.dp))
                 for (f in folders) {
-                    SidebarItem(f.name, ElvIcons.Folder, nav.tab == Tab.Folders && nav.folder?.treeUri == f.treeUri) { nav.openFolder(f) }
+                    SidebarItem(f.name, if (Drive.isDriveTree(f.treeUri)) ElvIcons.Cloud else ElvIcons.Folder, nav.tab == Tab.Folders && nav.folder?.treeUri == f.treeUri) { nav.openFolder(f) }
                 }
-                SidebarItem("폴더 추가…", ElvIcons.Plus, false, accent = true, onClick = onAdd)
+                var addMenu by remember { mutableStateOf(false) }
+                Box {
+                    SidebarItem("폴더 추가…", ElvIcons.Plus, nav.driveBrowser, accent = true) { addMenu = true }
+                    ElvMenu(addMenu, { addMenu = false }) {
+                        ElvMenuItem("이 기기의 폴더…") { addMenu = false; onAdd() }
+                        ElvMenuItem("Google Drive 폴더…") { addMenu = false; onAddDrive() }
+                    }
+                }
             }
             SidebarItem("파일 열기…", ElvIcons.File, false, onClick = onOpenFile)
             SidebarItem("설정", ElvIcons.Settings, nav.tab == Tab.Settings) { nav.tab = Tab.Settings }

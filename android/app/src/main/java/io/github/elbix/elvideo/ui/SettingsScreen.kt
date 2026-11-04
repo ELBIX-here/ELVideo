@@ -18,10 +18,13 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import io.github.elbix.elvideo.BuildConfig
 import io.github.elbix.elvideo.app
+import io.github.elbix.elvideo.data.Drive
 
 @Composable
 fun SettingsScreen(wide: Boolean) {
-    val s = LocalContext.current.app.settings
+    val context = LocalContext.current
+    val s = context.app.settings
+    val driveConnected by s.driveConnected.collectAsState()
     val appearance by s.appearance.collectAsState()
     val speed by s.speed.collectAsState()
     val resume by s.resume.collectAsState()
@@ -59,6 +62,23 @@ fun SettingsScreen(wide: Boolean) {
             }
         }
 
+        SectionLabel("Google Drive", Modifier.padding(start = 4.dp, top = 12.dp))
+        Card(Modifier.fillMaxWidth()) {
+            val connect = LocalConnectDrive.current
+            if (driveConnected) {
+                SettingRow("연결됨", "Drive 폴더를 읽기 전용으로 엽니다") {
+                    PillButton("연결 해제", {
+                        Drive.signOut(context)
+                        s.setDriveConnected(false)
+                    }, style = ButtonStyle.Plain, height = 32.dp)
+                }
+            } else {
+                SettingRow("연결 안 됨", "폴더 → Google Drive 폴더 추가에서도 연결됩니다") {
+                    if (connect != null) PillButton("연결", { connect {} }, height = 32.dp)
+                }
+            }
+        }
+
         if (folders.isNotEmpty()) {
             SectionLabel("폴더", Modifier.padding(start = 4.dp, top = 12.dp))
             Card(Modifier.fillMaxWidth()) {
@@ -79,10 +99,5 @@ fun SettingsScreen(wide: Boolean) {
             Hairline(inset = 16.dp)
             SettingRow("재생 엔진", "AndroidX Media3 (ExoPlayer)") {}
         }
-        Text(
-            "Google Drive 연결은 다음 버전에서 추가됩니다. 지금은 휴대폰과 SD 카드의 폴더를 쓸 수 있습니다.",
-            style = Type.caption, color = c.textDim, overflow = TextOverflow.Clip,
-            modifier = Modifier.padding(horizontal = 4.dp, vertical = 8.dp),
-        )
     }
 }

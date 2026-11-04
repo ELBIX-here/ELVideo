@@ -51,5 +51,7 @@ object ElvIcons {
     val Rotate = icon("rotate", line("M7 4h10a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z"), line("M10 17h4"))
     val Brightness = icon("brightness", line("M12 8a4 4 0 1 0 0 8a4 4 0 1 0 0-8z"), line("M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.3 5.3l1.4 1.4M17.3 17.3l1.4 1.4M5.3 18.7l1.4-1.4M17.3 6.7l1.4-1.4"))
     val Volume = icon("volume", fill("M4 9h4l5-4v14l-5-4H4z"), line("M16.5 8.5a5 5 0 0 1 0 7M19 6a8.5 8.5 0 0 1 0 12"))
+    val Cloud = icon("cloud", line("M7 18.5h10.5a4 4 0 0 0 .6-7.96A6 6 0 0 0 6.5 9.2 4.7 4.7 0 0 0 7 18.5z"))
+    val Phone = icon("phone", line("M8 2.5h8a2 2 0 0 1 2 2v15a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2v-15a2 2 0 0 1 2-2z"), line("M10.5 18.5h3"))
     val More = icon("more", fill("M5 10.5a1.5 1.5 0 1 0 0 3a1.5 1.5 0 1 0 0-3zM12 10.5a1.5 1.5 0 1 0 0 3a1.5 1.5 0 1 0 0-3zM19 10.5a1.5 1.5 0 1 0 0 3a1.5 1.5 0 1 0 0-3z"))
 }

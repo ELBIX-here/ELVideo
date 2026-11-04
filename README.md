@@ -290,17 +290,24 @@ WGC 프레임(BGRA) ─▶ VideoConverter ─▶ 최신 NV12 텍스처 ─▶ Fr
   - 책처럼 세운 자세: 한쪽에 영상, 다른 쪽에 재생목록. 접는 선 위에는 아무것도 두지 않습니다.
   - 접기·펴기·회전에도 액티비티를 다시 만들지 않아 재생이 끊기지 않습니다.
 - **진행 기록**: 앱 저장소의 `progress.json`. 5초마다, 그리고 일시정지·강의 전환·종료 때 씁니다. 다 봄 기준은 데스크톱과 같습니다.
-- **Google Drive**: 아직 없습니다. Drive API 연동은 OAuth 클라이언트를 발급받은 뒤 추가합니다.
+- **Google Drive**: "Google Drive 폴더 추가…"로 Drive의 강의 폴더를 등록합니다(읽기 전용, `drive.readonly`).
+  - 로그인은 Play 서비스의 Google 계정 인증입니다(ELViewer와 같은 방식). 앱에는 비밀값이 없고, Google이 패키지 이름과 서명 키 SHA-1로 앱을 알아봅니다.
+  - Google Cloud 프로젝트는 ELViewer와 같이 씁니다(`ELViewer/docs/google-drive-setup.md`). 등록된 Android 클라이언트는 둘입니다.
+    - `io.github.elbix.elvideo`: 업로드 키 SHA-1 `CD:00:48:…:EA:69`.
+    - `io.github.elbix.elvideo.debug`: 이 PC의 디버그 키 `A5:36:B2:…:B2:A1`.
+  - 폴더 고르기: 내 드라이브, 공유 문서함, 공유 드라이브부터 앱 안에서 한 단계씩 들어갑니다. Android에는 Drive 폴더를 고르는 시스템 화면이 없기 때문입니다.
+  - 목록은 Drive API로 읽습니다. 강의 길이는 Drive가 아는 값(`videoMediaMetadata`)을 쓰고, 썸네일도 Drive가 만든 것을 씁니다.
+  - 재생은 파일을 받지 않고 `files/<id>?alt=media`에서 필요한 부분만 받아 가며 스트리밍합니다. 동영상은 `drive://<파일 ID>`로 기록합니다.
 
 빌드(JDK 17, Android SDK 37, Gradle은 래퍼가 받음):
 
 ```
 cd android
 gradlew.bat assembleDebug      # app/build/outputs/apk/debug/app-debug.apk
-gradlew.bat assembleRelease    # android/keystore.properties가 있으면 서명
+gradlew.bat assembleRelease    # android/keystore.properties가 있으면 서명 (ELViewer 업로드 키)
 ```
 
-`keystore.properties`(git 제외)에는 `storeFile`, `storePassword`, `keyAlias`, `keyPassword`를 적습니다. 최소 Android 10(API 29)입니다.
+`keystore.properties`(git 제외)에는 `storeFile`, `keyAlias`와 비밀번호(`storePassword`+`keyPassword`, 또는 둘 다 같으면 `password` 하나)를 적습니다. ELViewer의 `src-tauri/gen/android/keystore.properties`를 그대로 복사해 쓰면 됩니다. 최소 Android 10(API 29)입니다.
 
 ## 디자인
 

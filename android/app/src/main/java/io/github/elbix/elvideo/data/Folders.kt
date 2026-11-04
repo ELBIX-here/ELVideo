@@ -19,6 +19,7 @@ data class Video(
     val title: String,         // without the extension
     val size: Long,
     val subtitleUri: String?,  // a same-named .srt / .vtt next to it
+    val subtitleMime: String? = null,
 )
 
 data class SubFolder(
@@ -43,6 +44,16 @@ object Folders {
     private val subtitleExtensions = listOf("srt", "vtt")
 
     fun rootDocId(treeUri: Uri): String = DocumentsContract.getTreeDocumentId(treeUri)
+
+    // The first folder of a library entry: a document tree, or a Drive folder.
+    fun rootOf(treeUri: String): String =
+        if (Drive.isDriveTree(treeUri)) Drive.folderIdOf(treeUri) else rootDocId(Uri.parse(treeUri))
+
+    fun subtitleMime(name: String) = if (extension(name) == "vtt") "text/vtt" else "application/x-subrip"
+
+    // Lists a folder of either kind.
+    suspend fun list(context: Context, treeUri: String, docId: String, progress: WatchProgress): Listing =
+        if (Drive.isDriveTree(treeUri)) Drive.list(context, docId, progress) else list(context, Uri.parse(treeUri), docId)
 
     fun documentUri(treeUri: Uri, docId: String): Uri = DocumentsContract.buildDocumentUriUsingTree(treeUri, docId)
 
@@ -82,6 +93,7 @@ object Folders {
                     title = base,
                     size = it.size,
                     subtitleUri = subtitles[base.lowercase(Locale.ROOT)]?.let { s -> documentUri(treeUri, s.docId).toString() },
+                    subtitleMime = subtitles[base.lowercase(Locale.ROOT)]?.let { s -> subtitleMime(s.name) },
                 )
             }
             .sortedWith(compareBy(NaturalOrder) { it.name })
@@ -112,7 +124,7 @@ object Folders {
     suspend fun probeDurations(context: Context, videos: List<Video>, progress: WatchProgress) = withContext(Dispatchers.IO) {
         for (v in videos) {
             coroutineContext.ensureActive()
-            if ((progress.get(v.uri)?.duration ?: -1.0) > 0) continue
+            if (Drive.isDriveVideo(v.uri) || (progress.get(v.uri)?.duration ?: -1.0) > 0) continue
             val seconds = probeDuration(context, Uri.parse(v.uri)) ?: continue
             progress.setDuration(v.uri, seconds)
         }

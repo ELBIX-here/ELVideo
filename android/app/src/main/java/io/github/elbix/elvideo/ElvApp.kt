@@ -6,6 +6,7 @@ import coil3.ImageLoader
 import coil3.PlatformContext
 import coil3.SingletonImageLoader
 import coil3.video.VideoFrameDecoder
+import io.github.elbix.elvideo.data.DriveThumbnailFetcher
 import io.github.elbix.elvideo.data.Settings
 import io.github.elbix.elvideo.data.WatchProgress
 
@@ -21,10 +22,13 @@ class ElvApp : Application(), SingletonImageLoader.Factory {
         progress = WatchProgress(this)
     }
 
-    // Thumbnails are a frame from each video.
+    // Thumbnails are a frame from each local video, or Drive's own for Drive videos.
     override fun newImageLoader(context: PlatformContext): ImageLoader =
         ImageLoader.Builder(context)
-            .components { add(VideoFrameDecoder.Factory()) }
+            .components {
+                add(DriveThumbnailFetcher.Factory(this@ElvApp))
+                add(VideoFrameDecoder.Factory())
+            }
             .build()
 }
 

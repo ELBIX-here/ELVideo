@@ -6,7 +6,8 @@ plugins {
 }
 
 // Release signing comes from android/keystore.properties (not in git):
-// storeFile, storePassword, keyAlias, keyPassword.
+// storeFile, keyAlias, and storePassword + keyPassword or one `password` for
+// both (the ELViewer upload key's file has that form).
 val keystoreProps = Properties().apply {
     val f = rootProject.file("keystore.properties")
     if (f.exists()) f.inputStream().use { load(it) }
@@ -28,9 +29,9 @@ android {
         if (keystoreProps.isNotEmpty()) {
             create("release") {
                 storeFile = rootProject.file(keystoreProps.getProperty("storeFile"))
-                storePassword = keystoreProps.getProperty("storePassword")
+                storePassword = keystoreProps.getProperty("storePassword") ?: keystoreProps.getProperty("password")
                 keyAlias = keystoreProps.getProperty("keyAlias")
-                keyPassword = keystoreProps.getProperty("keyPassword")
+                keyPassword = keystoreProps.getProperty("keyPassword") ?: keystoreProps.getProperty("password")
             }
         }
     }
@@ -77,4 +78,5 @@ dependencies {
     implementation(libs.media3.ui.compose)
     implementation(libs.coil.compose)
     implementation(libs.coil.video)
+    implementation(libs.play.services.auth)
 }

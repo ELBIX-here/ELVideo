@@ -16,8 +16,13 @@ import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.text.Cue
 import androidx.media3.common.text.CueGroup
+import androidx.media3.datasource.DefaultDataSource
+import androidx.media3.datasource.DefaultHttpDataSource
+import androidx.media3.datasource.ResolvingDataSource
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import io.github.elbix.elvideo.app
+import io.github.elbix.elvideo.data.Drive
 import io.github.elbix.elvideo.data.Folders
 import io.github.elbix.elvideo.data.WatchProgress
 import kotlinx.coroutines.delay
@@ -25,7 +30,7 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
 // One lecture in the playlist: the videos of the folder it was opened from.
-data class QueueItem(val uri: String, val name: String, val title: String, val subtitleUri: String?)
+data class QueueItem(val uri: String, val name: String, val title: String, val subtitleUri: String?, val subtitleMime: String? = null)
 
 // Owns the player so it survives folding, unfolding and rotating, and keeps
 // the watch progress (WatchProgress) current: every few seconds while playing,
@@ -34,7 +39,23 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
     private val settings = application.app.settings
     private val progress = application.app.progress
 
+    // drive://<id> becomes the Drive API's media URL with the account's token;
+    // everything else (content://, file://) goes to the default sources.
+    private val dataSources = ResolvingDataSource.Factory(
+        DefaultDataSource.Factory(application, DefaultHttpDataSource.Factory().setAllowCrossProtocolRedirects(true)),
+    ) { spec ->
+        if (spec.uri.scheme != Drive.SCHEME) spec
+        else {
+            val token = Drive.tokenBlocking(application) ?: throw Drive.NotSignedIn()
+            spec.buildUpon()
+                .setUri(Uri.parse(Drive.mediaUrl(spec.uri.host ?: "")))
+                .setHttpRequestHeaders(spec.httpRequestHeaders + ("Authorization" to "Bearer $token"))
+                .build()
+        }
+    }
+
     val player: ExoPlayer = ExoPlayer.Builder(application)
+        .setMediaSourceFactory(DefaultMediaSourceFactory(dataSources))
         .setAudioAttributes(AudioAttributes.Builder().setUsage(C.USAGE_MEDIA).setContentType(C.AUDIO_CONTENT_TYPE_MOVIE).build(), true)
         .setHandleAudioBecomingNoisy(true)
         .build()
@@ -86,7 +107,9 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
             override fun onCues(cueGroup: CueGroup) { cues = cueGroup.cues }
 
             override fun onPlayerError(e: PlaybackException) {
-                error = "재생할 수 없는 파일입니다 (${e.errorCodeName})"
+                error = if (e.cause is Drive.NotSignedIn || e.cause?.cause is Drive.NotSignedIn) "Google Drive에 다시 로그인해야 합니다 (설정 → Google Drive)"
+                else if (e.errorCode in 2000..2999) "동영상을 받아 오지 못했습니다. 연결을 확인하세요 (${e.errorCodeName})"
+                else "재생할 수 없는 파일입니다 (${e.errorCodeName})"
             }
         })
         viewModelScope.launch {
@@ -110,12 +133,13 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
             var items = emptyList<QueueItem>()
             if (tree != null && parent != null) {
                 items = runCatching {
-                    Folders.list(ctx, Uri.parse(tree), parent).videos.map { QueueItem(it.uri, it.name, it.title, it.subtitleUri) }
+                    Folders.list(ctx, tree, parent, progress).videos.map { QueueItem(it.uri, it.name, it.title, it.subtitleUri, it.subtitleMime) }
                 }.getOrDefault(emptyList())
             }
             var start = items.indexOfFirst { it.uri == uri }
             if (start < 0) {
-                val name = Folders.displayName(ctx, Uri.parse(uri)) ?: Uri.parse(uri).lastPathSegment?.substringAfterLast('/') ?: "동영상"
+                val name = progress.get(uri)?.name?.ifEmpty { null } ?: Folders.displayName(ctx, Uri.parse(uri))
+                    ?: Uri.parse(uri).lastPathSegment?.substringAfterLast('/') ?: "동영상"
                 items = listOf(QueueItem(uri, name, name.substringBeforeLast('.'), null))
                 start = 0
             }
@@ -188,7 +212,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
     private fun mediaItem(item: QueueItem): MediaItem {
         val b = MediaItem.Builder().setUri(item.uri).setMediaId(item.uri)
         item.subtitleUri?.let { sub ->
-            val mime = if (sub.lowercase().endsWith("vtt")) MimeTypes.TEXT_VTT else MimeTypes.APPLICATION_SUBRIP
+            val mime = item.subtitleMime ?: if (sub.lowercase().endsWith("vtt")) MimeTypes.TEXT_VTT else MimeTypes.APPLICATION_SUBRIP
             b.setSubtitleConfigurations(listOf(
                 MediaItem.SubtitleConfiguration.Builder(Uri.parse(sub)).setMimeType(mime)
                     .setSelectionFlags(C.SELECTION_FLAG_DEFAULT).build()

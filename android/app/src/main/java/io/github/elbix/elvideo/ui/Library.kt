@@ -46,6 +46,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import io.github.elbix.elvideo.Crumb
 import io.github.elbix.elvideo.app
+import io.github.elbix.elvideo.data.Drive
 import io.github.elbix.elvideo.data.Folders
 import io.github.elbix.elvideo.data.LibraryFolder
 import io.github.elbix.elvideo.data.Listing
@@ -139,6 +140,7 @@ fun FoldersScreen(
     folders: List<LibraryFolder>,
     onOpen: (LibraryFolder) -> Unit,
     onAdd: () -> Unit,
+    onAddDrive: () -> Unit,
     onOpenFile: () -> Unit,
     onRemove: (LibraryFolder) -> Unit,
 ) {
@@ -148,8 +150,8 @@ fun FoldersScreen(
         if (folders.isEmpty()) {
             item {
                 EmptyState(ElvIcons.Folder, "강의 폴더를 추가하세요",
-                    "휴대폰이나 SD 카드의 동영상 폴더를 고르면 하위 폴더까지 강의 목록으로 보여 줍니다.",
-                    Modifier.padding(top = 32.dp)) { PillButton("폴더 추가…", onAdd, icon = ElvIcons.Plus) }
+                    "휴대폰, SD 카드나 Google Drive의 동영상 폴더를 고르면 하위 폴더까지 강의 목록으로 보여 줍니다.",
+                    Modifier.padding(top = 32.dp))
             }
         } else {
             item {
@@ -163,9 +165,12 @@ fun FoldersScreen(
                                     .padding(horizontal = 16.dp, vertical = 14.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
-                                Icon(ElvIcons.Folder, null, Modifier.size(22.dp), tint = c.accent)
+                                Icon(if (Drive.isDriveTree(f.treeUri)) ElvIcons.Cloud else ElvIcons.Folder, null, Modifier.size(22.dp), tint = c.accent)
                                 Spacer(Modifier.width(14.dp))
-                                Text(f.name, style = Type.body, color = c.text, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                Column(Modifier.weight(1f)) {
+                                    Text(f.name, style = Type.body, color = c.text, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                    if (Drive.isDriveTree(f.treeUri)) Text("Google Drive", style = Type.caption, color = c.textDim)
+                                }
                                 Icon(ElvIcons.Chevron, null, Modifier.size(16.dp), tint = c.textFaint)
                             }
                             ElvMenu(menu, { menu = false }) {
@@ -178,7 +183,9 @@ fun FoldersScreen(
         }
         item {
             Card(Modifier.fillMaxWidth()) {
-                ActionRow("폴더 추가…", ElvIcons.Plus, onAdd)
+                ActionRow("이 기기의 폴더 추가…", ElvIcons.Phone, onAdd)
+                Hairline(inset = 52.dp)
+                ActionRow("Google Drive 폴더 추가…", ElvIcons.Cloud, onAddDrive)
                 Hairline(inset = 52.dp)
                 ActionRow("파일 열기…", ElvIcons.File, onOpenFile)
             }
@@ -235,11 +242,14 @@ fun FolderScreen(
     val progress = context.app.progress
     val c = Elv.colors
     val here = path.last()
-    val tree = remember(folder.treeUri) { Uri.parse(folder.treeUri) }
-
     var listing by remember(here.docId) { mutableStateOf<Listing?>(null) }
-    LaunchedEffect(here.docId) {
-        val l = Folders.list(context, tree, here.docId)
+    var failure by remember(here.docId) { mutableStateOf<String?>(null) }
+    var attempt by remember(here.docId) { mutableStateOf(0) }
+    LaunchedEffect(here.docId, attempt) {
+        failure = null
+        val l = runCatching { Folders.list(context, folder.treeUri, here.docId, progress) }
+            .onFailure { failure = if (it is Drive.NotSignedIn) "Google Drive에 로그인해야 이 폴더를 볼 수 있습니다." else "폴더를 읽을 수 없습니다. 연결을 확인하세요." }
+            .getOrNull() ?: return@LaunchedEffect
         listing = l
         Folders.probeDurations(context, l.videos, progress)
     }
@@ -293,7 +303,7 @@ fun FolderScreen(
                     Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         PageTitle(here.name)
                         val stats = buildList {
-                            if (l == null) add("읽는 중…")
+                            if (l == null) add(if (failure != null) "읽지 못함" else "읽는 중…")
                             else {
                                 add("동영상 ${videos.size}개")
                                 if (videos.isNotEmpty()) add(if (watched == videos.size) "다 봄" else "${watched}개 다 봄")
@@ -352,6 +362,19 @@ fun FolderScreen(
             }
         } else if (l != null && l.subfolders.isEmpty()) {
             item { EmptyState(ElvIcons.Folder, "동영상이 없어요", "이 폴더에는 재생할 수 있는 동영상이 없습니다.") }
+        }
+        val problem = failure
+        if (problem != null && l == null) {
+            item {
+                val connect = LocalConnectDrive.current
+                EmptyState(ElvIcons.Cloud, "폴더를 열 수 없어요", problem) {
+                    if (Drive.isDriveTree(folder.treeUri) && connect != null) {
+                        PillButton("Google 계정 연결", { connect { attempt++ } })
+                    } else {
+                        PillButton("다시 시도", { attempt++ })
+                    }
+                }
+            }
         }
     }
 }
