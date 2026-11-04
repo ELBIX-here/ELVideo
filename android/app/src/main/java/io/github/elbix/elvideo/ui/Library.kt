@@ -312,16 +312,16 @@ fun FolderScreen(
                         }
                         Text(stats.joinToString(" · "), style = Type.callout, color = c.textDim)
                     }
-                    if (wide && next != null) {
-                        Spacer(Modifier.width(16.dp))
-                        PillButton(continueLabel(next, entries[next.uri]), { play(next) }, icon = ElvIcons.Play)
-                    }
                 }
                 if (videos.isNotEmpty()) ThinProgress(watched.toFloat() / videos.size, Modifier.padding(top = 8.dp))
             }
         }
-        if (!wide && next != null) {
-            item { PillButton(continueLabel(next, entries[next.uri]), { play(next) }, Modifier.fillMaxWidth(), icon = ElvIcons.Play, height = 46.dp) }
+        // Under the title, not beside it: lecture names are long and would squeeze the title.
+        if (next != null) {
+            item {
+                PillButton(continueLabel(next, entries[next.uri]), { play(next) },
+                    if (wide) Modifier.widthIn(max = 480.dp) else Modifier.fillMaxWidth(), icon = ElvIcons.Play, height = 46.dp)
+            }
         }
         if (l != null && l.subfolders.isNotEmpty()) {
             item { SectionLabel("하위 폴더") }
@@ -432,6 +432,7 @@ private fun LectureRow(no: Int, v: Video, e: WatchProgress.Entry?, isNext: Boole
         }
         if (wide) {
             val duration = e?.duration?.takeIf { it > 0 }?.let { formatClock(it) } ?: ""
+            Spacer(Modifier.width(16.dp))
             Text(duration, style = Type.caption, color = c.textDim)
         }
         CheckCircle(watched, onToggle)
