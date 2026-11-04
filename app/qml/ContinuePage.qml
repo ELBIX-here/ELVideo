@@ -44,7 +44,7 @@ Item {
                 anchors.margins: 8
                 hoverEnabled: true
                 Accessible.name: cell.modelData.name
-                onClicked: desktop.openInPlayer(cell.modelData.path)
+                onClicked: desktop.openInPlayer(cell.modelData.path, cell.modelData.parent || "", cell.modelData.folder)
                 scale: down ? 0.98 : 1
                 Behavior on scale { NumberAnimation { duration: Theme.fast } }
                 background: Rectangle {

@@ -37,17 +37,21 @@ Copy-Item (Join-Path $root "app\resources\fonts\OFL.txt") (Join-Path $stage "Pre
 if ($LASTEXITCODE -ne 0) { throw "windeployqt failed" }
 
 # The app uses only the Basic Controls style (QQuickStyle::setStyle in main.cpp), so the
-# other styles (FluentWinUI3 alone is ~840 files), QML debugging and TLS/network
-# plugins are dead weight. scripts\test\check_deps.ps1 verifies nothing needs them.
+# other styles (FluentWinUI3 alone is ~840 files) and QML debugging are dead weight.
+# scripts\test\check_deps.ps1 verifies nothing needs them. Google Drive talks HTTPS
+# through Windows' own TLS (Schannel), so of the TLS backends only that one stays.
 foreach ($style in "FluentWinUI3", "Fusion", "Imagine", "Material", "Universal", "Windows") {
     Remove-Item -Recurse -Force (Join-Path $stage "qml\QtQuick\Controls\$style") -ErrorAction SilentlyContinue
 }
 Get-ChildItem $stage -Filter "Qt6QuickControls2*.dll" |
     Where-Object { $_.Name -match "^Qt6QuickControls2(FluentWinUI3|Fusion|Imagine|Material|Universal|Windows)" } |
     Remove-Item -Force
-foreach ($dir in "qmltooling", "tls", "networkinformation") {
+foreach ($dir in "qmltooling", "networkinformation") {
     Remove-Item -Recurse -Force (Join-Path $stage $dir) -ErrorAction SilentlyContinue
 }
+Get-ChildItem (Join-Path $stage "tls") -Filter "*.dll" -ErrorAction SilentlyContinue |
+    Where-Object { $_.Name -ne "qschannelbackend.dll" } | Remove-Item -Force
+if (-not (Test-Path (Join-Path $stage "tls\qschannelbackend.dll"))) { throw "Schannel TLS backend missing (Google Drive needs HTTPS)" }
 
 # MSVC runtime next to the exe, so no vc_redist install is needed.
 $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"

@@ -3,6 +3,7 @@
 #include <QObject>
 #include <QString>
 #include <QStringList>
+#include <QVariantMap>
 #include <QTimer>
 
 // User settings, stored as JSON in %APPDATA%\ELVideo\settings.json.
@@ -47,6 +48,8 @@ class AppSettings : public QObject {
     Q_PROPERTY(bool closeToTray MEMBER closeToTray NOTIFY changed)
     Q_PROPERTY(QString appearance MEMBER appearance NOTIFY changed)  // "system" | "light" | "dark"
     Q_PROPERTY(QStringList libraryFolders MEMBER libraryFolders NOTIFY changed)  // video library roots
+    // Display names of library roots that have no name in their path (Drive folders: "drive:<id>").
+    Q_PROPERTY(QVariantMap libraryNames MEMBER libraryNames NOTIFY changed)
     Q_PROPERTY(QString lastSource MEMBER lastSource NOTIFY changed)
     Q_PROPERTY(QString defaultOutputDir READ defaultOutputDir CONSTANT)
     Q_PROPERTY(QString filePath READ filePath CONSTANT)
@@ -102,6 +105,7 @@ public:
     bool closeToTray = true;
     QString appearance = QStringLiteral("system");
     QStringList libraryFolders;
+    QVariantMap libraryNames;
     QString lastSource;
 
     static constexpr auto kDefaultStartStop = "Ctrl+Shift+F9";

@@ -10,6 +10,7 @@
 #include "src/SourceModel.h"
 #include "src/TrayIcon.h"
 #include "src/WatchProgress.h"
+#include "src/GoogleDrive.h"
 #ifdef ELV_HAVE_MPV
 #include "src/player/PlayerMain.h"
 #endif
@@ -125,6 +126,7 @@ int main(int argc, char* argv[]) {
     ScreenCapture screenCapture(settings);
     LibraryModel library(settings);
     WatchProgress progress;
+    GoogleDrive drive;
     // From the tray menu: give the menu time to close so it is not in the picture.
     QObject::connect(&tray, &TrayIcon::screenshotRequested, &screenCapture,
                      [&] { QTimer::singleShot(250, &screenCapture, &ScreenCapture::start); });
@@ -165,6 +167,7 @@ int main(int argc, char* argv[]) {
     context->setContextProperty(QStringLiteral("screenCapture"), &screenCapture);
     context->setContextProperty(QStringLiteral("library"), &library);
     context->setContextProperty(QStringLiteral("progress"), &progress);
+    context->setContextProperty(QStringLiteral("drive"), &drive);
 #ifdef NDEBUG
     context->setContextProperty(QStringLiteral("debugBuild"), false);
 #else

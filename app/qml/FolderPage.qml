@@ -10,12 +10,20 @@ Item {
 
     property string rootPath   // the library folder this page belongs to
     property string path       // the folder shown (rootPath or a folder under it)
+    property string rootName   // a Drive library folder's name (its path is only an id)
+    readonly property bool isDrive: drive.isDrive(page.rootPath)
     property real bottomInset: 0
     signal message(string text)
 
     readonly property int rev: progress.revision  // re-evaluate progress bindings
     function entry(p) { return page.rev >= 0 ? progress.get(p) : ({}) }  // reading rev makes callers re-evaluate
-    function open(p) { desktop.openInPlayer(p) }
+    // A Drive video plays with the rest of its Drive folder as the playlist.
+    function open(p) { desktop.openInPlayer(p, page.isDrive ? page.path : "", page.crumbs[page.crumbs.length - 1].name) }
+    // A video's name without the extension (Drive paths are ids, so look it up).
+    function titleOf(p) {
+        const v = listing.videos.find(v => v.path === p)
+        return v ? v.title : page.fileName(p).replace(/\.[^.]+$/, "")
+    }
     function fileName(p) { return p.substring(p.replace(/\\/g, "/").lastIndexOf("/") + 1) }
 
     readonly property QtObject store: progress  // the context property (FolderListing has its own "progress")
@@ -23,11 +31,17 @@ Item {
         id: listing
         folder: page.path
         progress: page.store
+        folderName: page.crumbs[page.crumbs.length - 1].name
     }
     onVisibleChanged: if (visible) listing.refresh()
 
     // Breadcrumb: the library folder, then each folder down to this one.
     readonly property var crumbs: {
+        if (page.isDrive) {
+            // Drive ids carry no names: the library folder's, then those learned while listing.
+            const known = listing.videos.length >= 0 && !listing.loading ? drive.trail(page.rootPath, page.path) : []
+            return [{ name: page.rootName || qsTr("Google Drive"), path: page.rootPath }].concat(known)
+        }
         const norm = s => s.replace(/\\/g, "/").replace(/\/+$/, "")
         const root = norm(page.rootPath), here = norm(page.path)
         const list = [{ name: page.fileName(root) || root, path: root }]
@@ -126,7 +140,7 @@ Item {
                         Text {
                             Layout.fillWidth: true
                             text: listing.loading && listing.videos.length === 0 ? qsTr("불러오는 중…")
-                                : !listing.exists ? qsTr("폴더를 찾을 수 없습니다")
+                                : !listing.exists ? (listing.errorText || qsTr("폴더를 찾을 수 없습니다"))
                                 : listing.videos.length === 0 ? qsTr("하위 폴더 %1개").arg(listing.subfolders.length)
                                 : qsTr("동영상 %1개 · %2개 다 봄").arg(listing.videos.length).arg(listing.watchedCount)
                                   + (page.remaining > 60 ? qsTr(" · 남은 시간 약 %1").arg(Theme.formatClock(page.remaining)) : "")
@@ -146,7 +160,7 @@ Item {
                         visible: page.next.length > 0
                         primary: true
                         text: (page.nextEntry.position >= 5 ? qsTr("이어서 재생") : qsTr("재생")) + " · "
-                              + page.fileName(page.next).replace(/\.[^.]+$/, "")
+                              + page.titleOf(page.next)
                               + (page.nextEntry.position >= 5 ? qsTr(" %1부터").arg(Theme.formatClock(page.nextEntry.position)) : "")
                         implicitWidth: Math.min(360, contentItem.implicitWidth + 36)
                         onClicked: page.open(page.next)
@@ -406,8 +420,13 @@ Item {
                                         text: row.watched ? qsTr("안 본 것으로 표시") : qsTr("다 본 것으로 표시")
                                         onTriggered: progress.setWatched(row.modelData.path, !row.watched)
                                     }
-                                    AppMenuSeparator {}
-                                    AppMenuItem { text: qsTr("폴더에서 보기"); onTriggered: desktop.revealFile(row.modelData.path) }
+                                    AppMenuSeparator { visible: !page.isDrive }
+                                    AppMenuItem {
+                                        visible: !page.isDrive
+                                        height: visible ? implicitHeight : 0
+                                        text: qsTr("폴더에서 보기")
+                                        onTriggered: desktop.revealFile(row.modelData.path)
+                                    }
                                 }
                             }
                         }
@@ -433,11 +452,21 @@ Item {
                 }
                 Text {
                     Layout.alignment: Qt.AlignHCenter
-                    text: !listing.exists ? qsTr("Google Drive라면 Drive 데스크톱 앱이 실행 중인지 확인하세요.")
+                    text: !listing.exists ? (page.isDrive ? (listing.errorText || qsTr("Google Drive를 읽을 수 없습니다. 연결을 확인하세요."))
+                                                          : qsTr("Google Drive라면 Drive 데스크톱 앱이 실행 중인지 확인하세요."))
                                           : qsTr("mp4, mkv, avi, mov, webm 등의 동영상이 있는 폴더를 고르세요.")
                     color: Theme.textDim
                     font.family: Theme.fontFamily
                     font.pixelSize: Theme.body
+                }
+                AppButton {
+                    Layout.alignment: Qt.AlignHCenter
+                    Layout.topMargin: 8
+                    visible: page.isDrive && !listing.exists
+                    primary: true
+                    text: drive.connected ? qsTr("다시 시도") : qsTr("Google 계정 연결")
+                    enabled: !drive.busy
+                    onClicked: drive.connected ? listing.refresh() : drive.signIn()
                 }
             }
         }

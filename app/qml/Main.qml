@@ -36,7 +36,7 @@ ApplicationWindow {
     font.family: Theme.fontFamily
 
     // The two halves of the app, in the sidebar: recording ("record", "recordings")
-    // and watching ("continue", "folder"), plus "settings".
+    // and watching ("continue", "folder", "drive" for picking a Drive folder), plus "settings".
     property string section: "record"
     property string folderRoot   // the library folder chosen in the sidebar
     property string folderPath   // the folder shown under it
@@ -55,11 +55,20 @@ ApplicationWindow {
         appSettings.libraryFolders = list
         openFolder(path)
     }
+    // A Drive folder: its path is "drive:<id>", so its name is kept beside it.
+    function addDriveFolder(id, name) {
+        const path = drive.folderPath(id)
+        const names = Object.assign({}, appSettings.libraryNames)
+        names[path] = name
+        appSettings.libraryNames = names
+        addLibraryFolder(path)
+    }
     function removeLibraryFolder(path) {
         appSettings.libraryFolders = appSettings.libraryFolders.filter(f => f !== path)
         if (section === "folder" && folderRoot === path) section = "continue"
     }
     function folderName(path) {
+        if (drive.isDrive(path)) return appSettings.libraryNames[path] || qsTr("Google Drive 폴더")
         const p = path.replace(/\\/g, "/").replace(/\/+$/, "")
         return p.substring(p.lastIndexOf("/") + 1) || p
     }
@@ -323,13 +332,14 @@ ApplicationWindow {
                         id: folderItem
                         required property string modelData
                         Layout.fillWidth: true
+                        readonly property bool isDrive: drive.isDrive(modelData)
                         text: root.folderName(modelData)
-                        glyph: Theme.iconFolder
+                        glyph: isDrive ? "\uE753" : Theme.iconFolder
                         current: root.section === "folder" && root.folderRoot === modelData
                         onClicked: root.openFolder(modelData)
                         ToolTip.visible: hovered
                         ToolTip.delay: 800
-                        ToolTip.text: desktop.nativePath(modelData)
+                        ToolTip.text: isDrive ? qsTr("Google Drive · %1").arg(drive.email || root.folderName(modelData)) : desktop.nativePath(modelData)
                         TapHandler {
                             acceptedButtons: Qt.RightButton
                             onTapped: folderMenu.popup()
@@ -337,7 +347,12 @@ ApplicationWindow {
                         AppMenu {
                             id: folderMenu
                             AppMenuItem { text: qsTr("열기"); onTriggered: root.openFolder(folderItem.modelData) }
-                            AppMenuItem { text: qsTr("탐색기에서 보기"); onTriggered: desktop.openFolder(folderItem.modelData) }
+                            AppMenuItem {
+                                visible: !folderItem.isDrive
+                                height: visible ? implicitHeight : 0
+                                text: qsTr("탐색기에서 보기")
+                                onTriggered: desktop.openFolder(folderItem.modelData)
+                            }
                             AppMenuSeparator {}
                             AppMenuItem {
                                 destructive: true
@@ -348,11 +363,18 @@ ApplicationWindow {
                     }
                 }
                 SidebarItem {
+                    id: addFolderItem
                     Layout.fillWidth: true
                     text: qsTr("폴더 추가…")
                     glyph: "\uE710"
                     addStyle: true
-                    onClicked: libraryFolderDialog.open()
+                    current: root.section === "drive"
+                    onClicked: addMenu.popup(addFolderItem, 0, addFolderItem.height)
+                    AppMenu {
+                        id: addMenu
+                        AppMenuItem { text: qsTr("이 PC의 폴더…"); onTriggered: libraryFolderDialog.open() }
+                        AppMenuItem { text: qsTr("Google Drive 폴더…"); onTriggered: root.section = "drive" }
+                    }
                 }
 
                 Item { Layout.fillHeight: true }
@@ -385,7 +407,7 @@ ApplicationWindow {
 
             RowLayout {
                 Layout.fillWidth: true
-                visible: root.section !== "folder"
+                visible: root.section !== "folder" && root.section !== "drive"
                 spacing: 12
                 Text {
                     text: recorder.active && root.section === "record" ? (recorder.replayMode ? qsTr("리플레이 버퍼") : qsTr("녹화 중"))
@@ -419,7 +441,8 @@ ApplicationWindow {
                     currentIndex: root.section === "record" ? (recorder.active ? 2 : 0)
                                 : root.section === "recordings" ? 3
                                 : root.section === "continue" ? 4
-                                : root.section === "folder" ? 5 : 1
+                                : root.section === "folder" ? 5
+                                : root.section === "drive" ? 6 : 1
                     // Pages cross-fade in with a slight rise.
                     onCurrentIndexChanged: pageIn.restart()
                     ParallelAnimation {
@@ -442,9 +465,14 @@ ApplicationWindow {
                     ContinuePage { bottomInset: body.barInset }
                     FolderPage {
                         rootPath: root.folderRoot
+                        rootName: root.folderName(root.folderRoot)
                         path: root.folderPath
                         onPathChanged: root.folderPath = path
                         bottomInset: body.barInset
+                    }
+                    DriveBrowserPage {
+                        bottomInset: body.barInset
+                        onPicked: (id, name) => root.addDriveFolder(id, name)
                     }
                 }
 

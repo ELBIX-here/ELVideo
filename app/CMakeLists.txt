@@ -1,8 +1,27 @@
-find_package(Qt6 6.8 REQUIRED COMPONENTS Quick QuickControls2 Widgets OpenGL)
+find_package(Qt6 6.8 REQUIRED COMPONENTS Quick QuickControls2 Widgets OpenGL Network)
 find_package(spdlog CONFIG REQUIRED)
 find_package(nlohmann_json CONFIG REQUIRED)
 
 qt_standard_project_setup(REQUIRES 6.8)
+
+# Google sign-in for Drive folders uses the "installed app" OAuth client in
+# google_oauth.json at the repository root (not in git; README "Google Drive").
+# Without the file the build has no Drive sign-in and says so in the app.
+set(ELV_GOOGLE_CLIENT_ID "")
+set(ELV_GOOGLE_CLIENT_SECRET "")
+set(ELV_GOOGLE_OAUTH_FILE ${CMAKE_SOURCE_DIR}/google_oauth.json)
+if(EXISTS ${ELV_GOOGLE_OAUTH_FILE})
+    file(READ ${ELV_GOOGLE_OAUTH_FILE} ELV_GOOGLE_OAUTH_JSON)
+    string(JSON ELV_GOOGLE_CLIENT_ID ERROR_VARIABLE ELV_GOOGLE_OAUTH_ERROR GET ${ELV_GOOGLE_OAUTH_JSON} installed client_id)
+    string(JSON ELV_GOOGLE_CLIENT_SECRET ERROR_VARIABLE ELV_GOOGLE_OAUTH_ERROR GET ${ELV_GOOGLE_OAUTH_JSON} installed client_secret)
+    set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${ELV_GOOGLE_OAUTH_FILE})
+endif()
+file(CONFIGURE OUTPUT ${CMAKE_BINARY_DIR}/generated/elv_google_oauth.h
+     CONTENT "#pragma once
+#define ELV_GOOGLE_CLIENT_ID \"@ELV_GOOGLE_CLIENT_ID@\"
+#define ELV_GOOGLE_CLIENT_SECRET \"@ELV_GOOGLE_CLIENT_SECRET@\"
+"
+     @ONLY)
 
 qt_add_executable(elv_app WIN32
     main.cpp
@@ -14,6 +33,8 @@ qt_add_executable(elv_app WIN32
     src/Desktop.cpp
     src/FolderListing.h
     src/FolderListing.cpp
+    src/GoogleDrive.h
+    src/GoogleDrive.cpp
     src/Hotkeys.h
     src/Hotkeys.cpp
     src/LibraryModel.h
@@ -98,6 +119,7 @@ qt_add_qml_module(elv_app
         qml/SearchField.qml
         qml/SidebarItem.qml
         qml/FolderPage.qml
+        qml/DriveBrowserPage.qml
         qml/ContinuePage.qml
         ${ELV_PLAYER_QML}
 )
@@ -119,7 +141,9 @@ target_link_libraries(elv_app PRIVATE
     Qt6::Quick
     Qt6::QuickControls2
     Qt6::Widgets
+    Qt6::Network
     spdlog::spdlog
     nlohmann_json::nlohmann_json
     dwmapi
-    dbghelp)
+    dbghelp
+    crypt32)

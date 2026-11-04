@@ -48,13 +48,20 @@ bool Desktop::hasPlayer() const {
 #endif
 }
 
-void Desktop::openInPlayer(const QString& path) const {
+void Desktop::openInPlayer(const QString& path, const QString& driveFolder, const QString& folderName) const {
+    const bool drive = path.startsWith(QLatin1String("drive://"));
     if (!hasPlayer()) {
-        if (!path.isEmpty()) openFile(path);
+        if (!path.isEmpty() && !drive) openFile(path);
         return;
     }
     QStringList args{QStringLiteral("--player")};
-    if (!path.isEmpty()) args << QDir::toNativeSeparators(path);
+    if (drive) {
+        if (driveFolder.startsWith(QLatin1String("drive:"))) args << QStringLiteral("--drive-folder=") + driveFolder.mid(6);
+        if (!folderName.isEmpty()) args << QStringLiteral("--folder-name=") + folderName;
+        args << path;
+    } else if (!path.isEmpty()) {
+        args << QDir::toNativeSeparators(path);
+    }
     QProcess::startDetached(QCoreApplication::applicationFilePath(), args);
 }
 

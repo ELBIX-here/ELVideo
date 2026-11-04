@@ -9,3 +9,4 @@ third_party/
 
 # OAuth client files downloaded from Google Cloud
 client_secret_*.json
+google_oauth.json

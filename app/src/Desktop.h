@@ -23,7 +23,9 @@ public:
     Q_INVOKABLE void openFile(const QString& path) const;
     // Opens a video in ELVideo's player (a separate process); empty: just the player.
     // Falls back to the system default app when this build has no player.
-    Q_INVOKABLE void openInPlayer(const QString& path = {}) const;
+    // A Drive video (drive://…) plays with the rest of its Drive folder: `driveFolder`
+    // is that folder's library path (drive:…) and `folderName` what to call it.
+    Q_INVOKABLE void openInPlayer(const QString& path = {}, const QString& driveFolder = {}, const QString& folderName = {}) const;
     Q_INVOKABLE bool hasPlayer() const;
     Q_INVOKABLE void revealFile(const QString& path) const;  // Explorer with the file selected
     Q_INVOKABLE void openFolder(const QString& path) const;  // created if missing

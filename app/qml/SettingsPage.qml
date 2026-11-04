@@ -145,6 +145,26 @@ Item {
             }
 
             Section {
+                title: qsTr("Google Drive")
+                SettingRow {
+                    label: drive.connected ? qsTr("연결됨") : qsTr("연결 안 됨")
+                    description: drive.busy ? qsTr("브라우저에서 Google 로그인을 마치면 연결됩니다.")
+                        : drive.error.length > 0 ? drive.error
+                        : drive.connected ? (drive.email.length > 0 ? qsTr("%1 · Drive 폴더를 읽기 전용으로 엽니다.").arg(drive.email)
+                                                                    : qsTr("Drive 폴더를 읽기 전용으로 엽니다."))
+                        : !drive.configured ? qsTr("이 빌드에는 Google 로그인 설정이 없습니다.")
+                        : qsTr("사이드바의 폴더 추가 → Google Drive 폴더에서도 연결됩니다.")
+                    AppButton {
+                        visible: drive.configured
+                        enabled: !drive.busy
+                        primary: !drive.connected
+                        text: drive.connected ? qsTr("연결 해제") : drive.busy ? qsTr("기다리는 중…") : qsTr("연결")
+                        onClicked: drive.connected ? drive.signOut() : drive.signIn()
+                    }
+                }
+            }
+
+            Section {
                 title: qsTr("저장")
                 SettingRow {
                     label: qsTr("저장 폴더")

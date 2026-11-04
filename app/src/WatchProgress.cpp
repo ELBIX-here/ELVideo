@@ -1,5 +1,7 @@
 #include "WatchProgress.h"
 
+#include "GoogleDrive.h"
+
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
@@ -54,8 +56,10 @@ QString WatchProgress::filePath() {
     return QDir::fromNativeSeparators(qEnvironmentVariable("LOCALAPPDATA")) + QStringLiteral("/ELVideo/progress.json");
 }
 
-// Windows paths compare without case, and with either separator.
+// Windows paths compare without case, and with either separator. Drive ids are
+// case-sensitive and kept as they are.
 QString WatchProgress::key(const QString& path) {
+    if (gdrive::isDrive(path)) return path;
     return QDir::cleanPath(QDir::fromNativeSeparators(path)).toLower();
 }
 
@@ -70,6 +74,9 @@ void WatchProgress::load() {
         if (!v.is_object() || !v.contains("path") || !v["path"].is_string()) continue;
         Entry e;
         e.path = QString::fromStdString(v["path"].get<std::string>());
+        e.name = QString::fromStdString(v.value("name", std::string()));
+        e.folder = QString::fromStdString(v.value("folder", std::string()));
+        e.parent = QString::fromStdString(v.value("parent", std::string()));
         e.position = v.value("position", 0.0);
         e.duration = v.value("duration", -1.0);
         e.watched = v.value("watched", false);
@@ -89,11 +96,15 @@ void WatchProgress::save() {
 
     nlohmann::json videos = nlohmann::json::array();
     for (const auto& e : std::as_const(entries_)) {
-        videos.push_back({{"path", e.path.toStdString()},
-                          {"position", e.position},
-                          {"duration", e.duration},
-                          {"watched", e.watched},
-                          {"updated", e.updated}});
+        nlohmann::json v{{"path", e.path.toStdString()},
+                         {"position", e.position},
+                         {"duration", e.duration},
+                         {"watched", e.watched},
+                         {"updated", e.updated}};
+        if (!e.name.isEmpty()) v["name"] = e.name.toStdString();
+        if (!e.folder.isEmpty()) v["folder"] = e.folder.toStdString();
+        if (!e.parent.isEmpty()) v["parent"] = e.parent.toStdString();
+        videos.push_back(std::move(v));
     }
     QSaveFile file(filePath());  // write-then-rename, so a crash never leaves half a file
     if (file.open(QIODevice::WriteOnly)) {
@@ -157,18 +168,30 @@ void WatchProgress::setDuration(const QString& path, double duration) {
     touch(path, [&](Entry& e) { e.duration = duration; });
 }
 
+void WatchProgress::setLabel(const QString& path, const QString& name, const QString& folder, const QString& parent) {
+    const auto it = entries_.constFind(key(path));
+    if (it != entries_.cend() && it->name == name && it->folder == folder && it->parent == parent) return;
+    touch(path, [&](Entry& e) {
+        e.name = name;
+        e.folder = folder;
+        e.parent = parent;
+    });
+}
+
 QVariantList WatchProgress::inProgress(int limit) const {
     std::vector<const Entry*> list;
     for (const auto& e : entries_)
-        if (!e.watched && e.position >= 5 && QFileInfo::exists(e.path)) list.push_back(&e);
+        if (!e.watched && e.position >= 5 && (gdrive::isDrive(e.path) || QFileInfo::exists(e.path))) list.push_back(&e);
     std::sort(list.begin(), list.end(), [](const Entry* a, const Entry* b) { return a->updated > b->updated; });
     QVariantList out;
     for (const Entry* e : list) {
         if (out.size() >= limit) break;
         const QFileInfo info(e->path);
+        const bool drive = gdrive::isDrive(e->path);
         out.push_back(QVariantMap{{QStringLiteral("path"), e->path},
-                                  {QStringLiteral("name"), info.completeBaseName()},
-                                  {QStringLiteral("folder"), info.dir().dirName()},
+                                  {QStringLiteral("name"), drive ? QFileInfo(e->name).completeBaseName() : info.completeBaseName()},
+                                  {QStringLiteral("folder"), drive ? e->folder : info.dir().dirName()},
+                                  {QStringLiteral("parent"), drive ? e->parent : QString()},
                                   {QStringLiteral("position"), e->position},
                                   {QStringLiteral("duration"), e->duration},
                                   {QStringLiteral("updated"), e->updated}});

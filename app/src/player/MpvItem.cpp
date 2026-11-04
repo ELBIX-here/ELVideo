@@ -1,5 +1,7 @@
 #include "player/MpvItem.h"
 
+#include "GoogleDrive.h"
+
 #include <QDir>
 #include <QFileInfo>
 #include <QOpenGLContext>
@@ -272,7 +274,7 @@ void MpvItem::onProperty(const mpv_event_property& p) {
         playlist_ = node().toList();
         emit playlistChanged();
     } else if (name == "path") {
-        path_ = text();
+        path_ = gdrive::keyOf(text());
         emit fileChanged();
     } else if (name == "media-title") {
         title_ = text();
@@ -336,6 +338,8 @@ QVariant MpvItem::getMpvProperty(const QString& name) const {
     mpv_free_node_contents(&node);
     return value;
 }
+
+QString MpvItem::keyOf(const QString& filename) const { return gdrive::keyOf(filename); }
 
 void MpvItem::open(const QString& pathOrUrl) {
     const QUrl url(pathOrUrl);

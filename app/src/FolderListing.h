@@ -29,6 +29,9 @@ class FolderListing : public QObject {
     // [{ name, title, path, size }]
     Q_PROPERTY(QVariantList videos READ videos NOTIFY listed)
     Q_PROPERTY(int watchedCount READ watchedCount NOTIFY countsChanged)  // of this folder's own videos
+    Q_PROPERTY(QString errorText READ errorText NOTIFY listed)          // why a Drive folder could not be read
+    // The folder's own name: the last path part, or for a Drive folder the name Drive gives it.
+    Q_PROPERTY(QString folderName READ folderName WRITE setFolderName NOTIFY folderChanged)
 
 public:
     explicit FolderListing(QObject* parent = nullptr);
@@ -42,6 +45,9 @@ public:
     QVariantList subfolders() const;
     QVariantList videos() const { return videos_; }
     int watchedCount() const;
+    QString errorText() const { return errorText_; }
+    QString folderName() const { return folderName_; }
+    void setFolderName(const QString& name);
 
     Q_INVOKABLE void refresh();
     // The first video not watched to the end: the one to resume (or start) next.
@@ -64,11 +70,14 @@ private:
     };
 
     void probeDurations(int generation, const QStringList& paths);
+    void refreshDrive(int generation);
 
     QString folder_;
     QPointer<WatchProgress> progress_;
     bool loading_ = false;
     bool exists_ = true;
+    QString errorText_;
+    QString folderName_;
     int generation_ = 0;
     // The current generation, readable by the background probe without the UI thread.
     std::shared_ptr<std::atomic_int> live_ = std::make_shared<std::atomic_int>(0);

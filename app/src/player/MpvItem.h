@@ -47,6 +47,9 @@ public:
 
     // Opens a file or URL; the folder's other videos become the playlist.
     Q_INVOKABLE void open(const QString& pathOrUrl);
+    // What the watch progress calls a playlist entry: drive://<id> for a Drive
+    // stream, the path itself otherwise. `path` is already in this form.
+    Q_INVOKABLE QString keyOf(const QString& filename) const;
     Q_INVOKABLE void command(const QVariantList& args);
     Q_INVOKABLE void setMpvProperty(const QString& name, const QVariant& value);
     Q_INVOKABLE QVariant getMpvProperty(const QString& name) const;

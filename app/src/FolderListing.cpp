@@ -1,5 +1,6 @@
 #include "FolderListing.h"
 
+#include "GoogleDrive.h"
 #include "WatchProgress.h"
 #include "core/IRecorder.h"
 
@@ -8,8 +9,10 @@
 #include <QDirIterator>
 #include <QFileInfo>
 #include <QGuiApplication>
+#include <QThreadPool>
 
 #include <algorithm>
+#include <functional>
 #include <thread>
 
 namespace {
@@ -58,12 +61,22 @@ void FolderListing::setFolder(const QString& folder) {
     refresh();
 }
 
+void FolderListing::setFolderName(const QString& name) {
+    if (name == folderName_) return;
+    folderName_ = name;
+    emit folderChanged();
+}
+
 void FolderListing::refresh() {
     const int generation = ++generation_;
     live_->store(generation);
     if (folder_.isEmpty()) return;
     loading_ = true;
     emit loadingChanged();
+    if (gdrive::isFolder(folder_)) {
+        refreshDrive(generation);
+        return;
+    }
 
     std::thread([folder = folder_, generation, guard = QPointer<FolderListing>(this)] {
         const QDir dir(folder);
@@ -97,6 +110,7 @@ void FolderListing::refresh() {
         QMetaObject::invokeMethod(qApp, [guard, generation, exists, subs = std::move(subs), videos, paths]() mutable {
             if (!guard || guard->generation_ != generation) return;
             guard->exists_ = exists;
+            guard->errorText_.clear();
             guard->subs_ = std::move(subs);
             guard->videos_ = videos;
             guard->loading_ = false;
@@ -106,6 +120,72 @@ void FolderListing::refresh() {
             guard->probeDurations(generation, paths);
         }, Qt::QueuedConnection);
     }).detach();
+}
+
+// A Google Drive folder: the same listing from the Drive API. Durations come with
+// it (Drive reads them itself), and each video is labelled with its name and
+// folder so "이어서 보기" can show it without the file. Network calls block, so
+// this runs on the thread pool, subfolders side by side.
+void FolderListing::refreshDrive(int generation) {
+    QThreadPool::globalInstance()->start([folderId = gdrive::folderId(folder_), generation, live = live_,
+                                          guard = QPointer<FolderListing>(this)] {
+        QString error;
+        const auto kids = gdrive::children(folderId, &error);
+        std::vector<Sub> subs;
+        QVariantList videos;
+        struct Known {
+            QString path;
+            QString name;
+            double duration;
+        };
+        std::vector<Known> known;
+        if (kids) {
+            for (const auto& k : *kids) {
+                if (k.isFolder()) {
+                    subs.push_back(Sub{k.name, gdrive::folderPath(k.id), {}});
+                } else if (k.mime.startsWith(QLatin1String("video/")) || isVideo(k.name)) {
+                    const QString path = gdrive::videoPath(k.id);
+                    known.push_back({path, k.name, k.durationSec});
+                    videos.push_back(QVariantMap{{QStringLiteral("name"), k.name},
+                                                 {QStringLiteral("title"), QFileInfo(k.name).completeBaseName()},
+                                                 {QStringLiteral("path"), path},
+                                                 {QStringLiteral("size"), k.size}});
+                }
+            }
+            // Every video under each subfolder (three levels), for the counts.
+            std::function<QStringList(const QString&, int)> below = [&](const QString& id, int depth) {
+                QStringList out;
+                if (depth == 0 || live->load() != generation) return out;
+                if (const auto items = gdrive::children(id))
+                    for (const auto& i : *items) {
+                        if (i.isFolder()) out += below(i.id, depth - 1);
+                        else if (i.mime.startsWith(QLatin1String("video/")) || isVideo(i.name)) out.push_back(gdrive::videoPath(i.id));
+                    }
+                return out;
+            };
+            for (Sub& sub : subs) sub.videos = below(gdrive::folderId(sub.path), 3);
+            std::erase_if(subs, [](const Sub& s) { return s.videos.isEmpty(); });
+        }
+        QMetaObject::invokeMethod(qApp, [guard, generation, ok = kids.has_value(), error, subs = std::move(subs), videos,
+                                         known = std::move(known)]() mutable {
+            if (!guard || guard->generation_ != generation) return;
+            guard->exists_ = ok;
+            guard->errorText_ = ok ? QString() : error;
+            guard->subs_ = std::move(subs);
+            guard->videos_ = videos;
+            guard->loading_ = false;
+            if (guard->progress_) {
+                const QString folderName = guard->folderName_.isEmpty() ? gdrive::knownName(gdrive::folderId(guard->folder_)) : guard->folderName_;
+                for (const Known& k : known) {
+                    if (k.duration > 0) guard->progress_->setDuration(k.path, k.duration);
+                    guard->progress_->setLabel(k.path, k.name, folderName, guard->folder_);
+                }
+            }
+            emit guard->loadingChanged();
+            emit guard->listed();
+            emit guard->countsChanged();
+        }, Qt::QueuedConnection);
+    });
 }
 
 // Durations nobody has recorded yet, one file at a time, stopping when the folder changes.

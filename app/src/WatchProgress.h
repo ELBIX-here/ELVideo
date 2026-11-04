@@ -31,8 +31,11 @@ public:
     Q_INVOKABLE void setWatched(const QString& path, bool watched);
     // Remembers a duration probed elsewhere (library pages) without touching progress.
     Q_INVOKABLE void setDuration(const QString& path, double duration);
-    // Started but not finished, most recent first, existing files only:
-    // [{ path, name, folder, position, duration, updated }].
+    // What to call a video that is not a local file (Google Drive): its name, the
+    // folder's name and the folder's path, for "이어서 보기" and its playlist.
+    Q_INVOKABLE void setLabel(const QString& path, const QString& name, const QString& folder, const QString& parent);
+    // Started but not finished, most recent first, existing files (and Drive videos) only:
+    // [{ path, name, folder, parent, position, duration, updated }].
     Q_INVOKABLE QVariantList inProgress(int limit = 24) const;
 
     // Writes pending changes now (the player calls this before quitting).
@@ -46,6 +49,9 @@ signals:
 private:
     struct Entry {
         QString path;  // as given, for display and opening
+        QString name;    // Drive videos: the file name (local files have their path)
+        QString folder;  //   and the folder's name and path
+        QString parent;
         double position = 0;
         double duration = -1;
         bool watched = false;

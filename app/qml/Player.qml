@@ -142,7 +142,31 @@ ApplicationWindow {
 
     Component.onCompleted: {
         desktop.useDarkTitleBar(win)
-        if (initialFile.length > 0) player.open(initialFile)
+        if (initialFile.startsWith("drive://")) drive.preparePlayback(initialDriveFolder, initialFile, initialFolderName)
+        else if (initialFile.length > 0) player.open(initialFile)
+    }
+
+    // Google Drive: the folder's videos come as a playlist of media URLs that mpv
+    // streams with the account's token in the request headers.
+    property string driveFolderName
+    readonly property bool drivePlaying: player.path.startsWith("drive://")
+    Connections {
+        target: drive
+        function onPlaybackReady(file, start, header, folderName) {
+            win.driveFolderName = folderName
+            player.setMpvProperty("ytdl", false)
+            player.setMpvProperty("http-header-fields", header)
+            player.setMpvProperty("playlist-start", start)
+            player.open(file)
+        }
+        function onPlaybackFailed(message) { win.osd(message) }
+        function onHeaderReady(header) { player.setMpvProperty("http-header-fields", header) }
+    }
+    Timer {  // tokens last an hour: renew the header before the next file or reconnect needs it
+        interval: 40 * 60 * 1000
+        repeat: true
+        running: win.drivePlaying
+        onTriggered: drive.refreshHeader()
     }
     // Closing while mpv still has its audio output open crashes in the Qt Windows plugin
     // during shutdown. So: remember the position, stop (which releases the audio
@@ -194,7 +218,8 @@ ApplicationWindow {
         onError: message => win.osd(qsTr("재생할 수 없습니다: %1").arg(message))
         onFileLoaded: win.showControls()
         // Hover previews: the thumbnailer needs the file and the picture's aspect ratio.
-        onVideoSizeChanged: if (videoWidth > 0) seekThumbs.setFile(path, videoWidth, videoHeight)
+        // (Not for Drive streams: previews would download the video a second time.)
+        onVideoSizeChanged: if (videoWidth > 0 && !path.startsWith("drive://")) seekThumbs.setFile(path, videoWidth, videoHeight)
         onFileChanged: if (path.length === 0) seekThumbs.setFile("", 0, 0)
     }
 
@@ -373,6 +398,7 @@ ApplicationWindow {
         }
     }
     readonly property string folderName: {
+        if (win.drivePlaying) return win.driveFolderName
         const p = player.path.replace(/\\/g, "/")
         const dir = p.substring(0, p.lastIndexOf("/"))
         return dir.substring(dir.lastIndexOf("/") + 1)
@@ -427,7 +453,7 @@ ApplicationWindow {
             Text {
                 text: {
                     let watched = playlistPanel.rev >= 0 ? 0 : 0
-                    for (const e of player.playlist) if (progress.get(e.filename).watched) ++watched
+                    for (const e of player.playlist) if (progress.get(player.keyOf(e.filename)).watched) ++watched
                     return qsTr("%1 / %2 다 봄").arg(watched).arg(player.playlist.length)
                 }
                 color: Theme.hudTextDim
@@ -455,7 +481,7 @@ ApplicationWindow {
                 required property var modelData
                 required property int index
                 readonly property bool current: index === player.playlistPos
-                readonly property var e: playlistPanel.rev >= 0 ? progress.get(modelData.filename) : ({})
+                readonly property var e: playlistPanel.rev >= 0 ? progress.get(player.keyOf(modelData.filename)) : ({})
                 readonly property bool watched: e.watched === true
                 readonly property real fraction: watched ? 1 : e.duration > 0 ? Math.min(1, (e.position || 0) / e.duration) : 0
                 width: ListView.view.width
@@ -493,6 +519,7 @@ ApplicationWindow {
                             id: label
                             Layout.fillWidth: true
                             text: {
+                                if (entry.modelData.title) return entry.modelData.title  // Drive: from the playlist file
                                 const p = entry.modelData.filename.replace(/\\/g, "/")
                                 return p.substring(p.lastIndexOf("/") + 1).replace(/\.[^.]+$/, "")
                             }

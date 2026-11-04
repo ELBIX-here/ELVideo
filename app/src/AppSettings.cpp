@@ -121,6 +121,10 @@ void AppSettings::load() {
     if (const auto it = j.find("libraryFolders"); it != j.end() && it->is_array())
         for (const auto& f : *it)
             if (f.is_string()) libraryFolders.push_back(QString::fromStdString(f.get<std::string>()));
+    libraryNames.clear();
+    if (const auto it = j.find("libraryNames"); it != j.end() && it->is_object())
+        for (const auto& [k, v] : it->items())
+            if (v.is_string()) libraryNames.insert(QString::fromStdString(k), QString::fromStdString(v.get<std::string>()));
     lastSource = str(j, "lastSource", lastSource);
     emit changed();
     loading_ = false;
@@ -168,6 +172,12 @@ void AppSettings::save() {
              auto folders = nlohmann::json::array();
              for (const QString& f : libraryFolders) folders.push_back(f.toStdString());
              return folders;
+         }()},
+        {"libraryNames", [this] {
+             auto names = nlohmann::json::object();
+             for (auto it = libraryNames.cbegin(); it != libraryNames.cend(); ++it)
+                 if (libraryFolders.contains(it.key())) names[it.key().toStdString()] = it.value().toString().toStdString();
+             return names;
          }()},
         {"lastSource", lastSource.toStdString()},
     };

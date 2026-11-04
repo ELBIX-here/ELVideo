@@ -1,5 +1,7 @@
 #include "LibraryModel.h"
 
+#include "GoogleDrive.h"
+
 #include "AppSettings.h"
 
 #include "core/IRecorder.h"
@@ -221,7 +223,11 @@ QQuickImageResponse* LibraryThumbnailProvider::requestImageResponse(const QStrin
     const QSize size = requestedSize.isValid() ? requestedSize : QSize(320, 180);
     pool_.start([response, path, size] {
         QImage image;
-        if (path.endsWith(QLatin1String(".png"), Qt::CaseInsensitive) || path.endsWith(QLatin1String(".jpg"), Qt::CaseInsensitive) ||
+        if (gdrive::isVideo(path)) {
+            // Drive makes its own thumbnails; nothing of the video is downloaded.
+            image = QImage::fromData(gdrive::thumbnail(gdrive::videoId(path), std::max(size.width(), size.height()) * 2));
+            if (!image.isNull()) image = image.scaled(size, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+        } else if (path.endsWith(QLatin1String(".png"), Qt::CaseInsensitive) || path.endsWith(QLatin1String(".jpg"), Qt::CaseInsensitive) ||
             path.endsWith(QLatin1String(".jpeg"), Qt::CaseInsensitive)) {
             QImageReader reader(path);
             const QSize full = reader.size();

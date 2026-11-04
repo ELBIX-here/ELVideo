@@ -4,6 +4,8 @@
 
 #include "player/PlayerMain.h"
 
+#include "GoogleDrive.h"
+
 #include "AppSettings.h"
 #include "player/SeekThumbnailer.h"
 #include "Desktop.h"
@@ -38,18 +40,21 @@ int runPlayer(int argc, char* argv[]) {
 
     // The file to open: the first argument after --player that is not an option.
     QString file;
+    QString driveFolder;  // a Drive video's folder id: its playlist
+    QString folderName;
     const QStringList args = QApplication::arguments();
-    for (qsizetype i = args.indexOf(QStringLiteral("--player")) + 1; i < args.size(); ++i)
-        if (!args[i].startsWith(QLatin1String("--"))) {
-            file = args[i];
-            break;
-        }
+    for (qsizetype i = args.indexOf(QStringLiteral("--player")) + 1; i < args.size(); ++i) {
+        if (args[i].startsWith(QLatin1String("--drive-folder="))) driveFolder = args[i].section(QLatin1Char('='), 1);
+        else if (args[i].startsWith(QLatin1String("--folder-name="))) folderName = args[i].section(QLatin1Char('='), 1);
+        else if (!args[i].startsWith(QLatin1String("--")) && file.isEmpty()) file = args[i];
+    }
     spdlog::info("player starting{}", file.isEmpty() ? std::string() : ": " + file.toStdString());
 
     AppSettings settings;
     settings.load();
     Desktop desktop;
     WatchProgress progress;
+    GoogleDrive drive;
 
     SeekThumbnailer seekThumbs;
     QQmlApplicationEngine engine;
@@ -59,8 +64,12 @@ int runPlayer(int argc, char* argv[]) {
     context->setContextProperty(QStringLiteral("desktop"), &desktop);
     context->setContextProperty(QStringLiteral("appSettings"), &settings);
     context->setContextProperty(QStringLiteral("progress"), &progress);
+    context->setContextProperty(QStringLiteral("drive"), &drive);
     context->setContextProperty(QStringLiteral("initialFile"),
-                                file.isEmpty() ? QString() : QUrl::fromLocalFile(QFileInfo(file).absoluteFilePath()).toString());
+                                file.isEmpty() || gdrive::isVideo(file) ? file
+                                                                        : QUrl::fromLocalFile(QFileInfo(file).absoluteFilePath()).toString());
+    context->setContextProperty(QStringLiteral("initialDriveFolder"), driveFolder);
+    context->setContextProperty(QStringLiteral("initialFolderName"), folderName);
 #ifndef NDEBUG
     // Test hook: ELV_TEST_SEEKTHUMB=<png> saves the hover preview for 5 s once a file is open.
     if (const QString out = qEnvironmentVariable("ELV_TEST_SEEKTHUMB"); !out.isEmpty()) {

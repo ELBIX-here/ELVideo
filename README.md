@@ -160,7 +160,15 @@ A/V 싱크 확인: `scripts\test\sync_run.ps1`이 흰 화면 깜빡임과 1 kHz 
 ## 동영상 라이브러리 (강의 폴더)
 
 - **폴더 등록**: 사이드바의 "폴더 추가…"로 동영상 폴더를 등록합니다. 여러 개를 등록할 수 있고, 오른쪽 클릭 → "목록에서 빼기"로 뺍니다.
-  - Google Drive는 Google의 **Drive for desktop**이 붙여 주는 드라이브 폴더(예: `G:\내 드라이브\강의`)를 등록하면 됩니다. 재생할 때 Drive 앱이 필요한 부분만 내려받습니다.
+  - "폴더 추가…"는 "이 PC의 폴더…"와 "Google Drive 폴더…" 중에서 고릅니다. **Drive for desktop**이 붙여 주는 드라이브 폴더(예: `G:\내 드라이브\강의`)도 PC 폴더로 등록할 수 있습니다.
+- **Google Drive 직접 연결** (`GoogleDrive`): Drive for desktop 없이 Drive의 강의 폴더를 바로 스트리밍합니다.
+  - 로그인: 브라우저에서 Google 계정을 고르면 결과가 `http://127.0.0.1:<port>`로 돌아옵니다(설치형 앱 OAuth, PKCE). 권한은 `drive.readonly` 하나입니다.
+  - 갱신 토큰은 DPAPI로 암호화해 `%LOCALAPPDATA%\ELVideo\google.dat`에 둡니다. 설정 → Google Drive에서 연결을 해제하면 토큰을 폐기하고 파일도 지웁니다.
+  - 폴더 고르기: 내 드라이브, 공유 문서함, 공유 드라이브부터 한 단계씩 들어가 "이 폴더 추가"를 누릅니다. 사이드바에는 구름 아이콘으로 나옵니다.
+  - 목록·길이·썸네일은 Drive API(`videoMediaMetadata`, `thumbnailLink`)로 읽습니다. 경로는 폴더 `drive:<id>`, 동영상 `drive://<id>`로 기록합니다.
+  - 재생: 플레이어가 폴더의 강의를 m3u 재생목록(미디어 URL과 제목)으로 만들고, mpv가 `Authorization` 헤더를 붙여 스트리밍합니다. 토큰은 40분마다 새로 받습니다. Drive 동영상은 탐색 미리보기를 만들지 않습니다(동영상을 한 번 더 받게 되므로).
+  - OAuth 클라이언트: 저장소 루트의 `google_oauth.json`(Google Cloud에서 받은 "데스크톱 앱" 클라이언트 JSON, git에서 제외)을 빌드할 때 `generated/elv_google_oauth.h`로 넣습니다. 파일이 없으면 Drive 연결 없이 빌드됩니다. ELViewer와 같은 Cloud 프로젝트를 씁니다.
+  - HTTPS는 Windows TLS(Schannel)로 합니다. 패키지에는 `tls\qschannelbackend.dll`만 남깁니다.
 - **폴더 페이지**
   - 위치(경로 표시), 제목, "동영상 N개 · M개 다 봄 · 남은 시간"을 보여 줍니다.
   - **이어서 재생** 버튼은 보다가 멈춘 강의, 없으면 아직 안 본 첫 강의를 엽니다.
