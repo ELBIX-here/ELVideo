@@ -9,6 +9,7 @@
 #include <QDir>
 #include <QEventLoop>
 #include <QFile>
+#include <QFileInfo>
 #include <QGuiApplication>
 #include <QHash>
 #include <QJsonArray>
@@ -195,6 +196,13 @@ QString accountEmail() {
     return s ? s->email : QString();
 }
 
+std::function<void()> expiredHandler;
+
+void setExpiredHandler(std::function<void()> handler) {
+    QMutexLocker lock(&tokenMutex);
+    expiredHandler = std::move(handler);
+}
+
 QString accessToken(QString* error, bool refresh) {
     QMutexLocker lock(&tokenMutex);
     if (!refresh && !cachedToken.isEmpty() && std::chrono::steady_clock::now() < cachedUntil) return cachedToken;
@@ -213,11 +221,12 @@ QString accessToken(QString* error, bool refresh) {
     const QString token = j.value(QStringLiteral("access_token")).toString();
     if (token.isEmpty()) {
         // invalid_grant: access was withdrawn (Google account settings) or the token expired.
+        const bool expired = j.value(QStringLiteral("error")).toString() == QLatin1String("invalid_grant");
         if (error)
-            *error = j.value(QStringLiteral("error")).toString() == QLatin1String("invalid_grant")
-                         ? QStringLiteral("Google Drive에 다시 로그인해야 합니다")
-                         : QStringLiteral("Google에 연결할 수 없습니다 (%1)").arg(r.error.isEmpty() ? QString::number(r.status) : r.error);
+            *error = expired ? QStringLiteral("Google 로그인이 만료되었습니다. 다시 연결하세요.")
+                             : QStringLiteral("Google에 연결할 수 없습니다 (%1)").arg(r.error.isEmpty() ? QString::number(r.status) : r.error);
         cachedToken.clear();
+        if (expired && expiredHandler) expiredHandler();
         return {};
     }
     cachedToken = token;
@@ -313,13 +322,59 @@ QString knownParent(const QString& id) {
 // --- QML side ----------------------------------------------------------------------------
 
 GoogleDrive::GoogleDrive(QObject* parent) : QObject(parent) {
-    if (const auto s = gdrive::signedIn()) {
+    if (const auto s = gdrive::readStore()) {
         connected_ = true;
-        email_ = gdrive::accountEmail();
+        email_ = s->email;
     }
+    storeTime_ = QFileInfo(gdrive::storePath()).lastModified();
+    gdrive::setExpiredHandler([guard = QPointer<GoogleDrive>(this)] {
+        QMetaObject::invokeMethod(qApp, [guard] { if (guard) guard->markExpired(); }, Qt::QueuedConnection);
+    });
+    // The recorder and the player are separate processes: a sign-in in one reaches the
+    // other through google.dat (rewritten whole, so the folder is watched, not the file).
+    const QString dir = QFileInfo(gdrive::storePath()).absolutePath();
+    QDir().mkpath(dir);
+    storeWatcher_.addPath(dir);
+    connect(&storeWatcher_, &QFileSystemWatcher::directoryChanged, this, &GoogleDrive::syncWithStore);
 }
 
-GoogleDrive::~GoogleDrive() { stopServer(); }
+GoogleDrive::~GoogleDrive() {
+    gdrive::setExpiredHandler({});
+    stopServer();
+}
+
+void GoogleDrive::markExpired() {
+    if (expired_ || busy_) return;
+    spdlog::warn("drive: sign-in expired");
+    connected_ = false;
+    expired_ = true;
+    setError(tr("Google 로그인이 만료되었습니다. 다시 연결하세요."));
+    emit connectedChanged();
+}
+
+void GoogleDrive::syncWithStore() {
+    const QDateTime time = QFileInfo(gdrive::storePath()).lastModified();
+    if (time == storeTime_) return;
+    storeTime_ = time;
+    const auto s = gdrive::readStore();
+    if (s) {
+        {
+            QMutexLocker lock(&gdrive::tokenMutex);
+            gdrive::cachedToken.clear();  // a new sign-in: the next request takes a fresh token
+        }
+        connected_ = true;
+        expired_ = false;
+        email_ = s->email;
+        setError({});
+        emit connectedChanged();
+        emit signedIn();
+    } else if (connected_ || expired_) {
+        connected_ = false;
+        expired_ = false;
+        email_.clear();
+        emit connectedChanged();
+    }
+}
 
 void GoogleDrive::setBusy(bool busy) {
     if (busy == busy_) return;
@@ -465,7 +520,9 @@ void GoogleDrive::finishSignIn(const QString& code, const QString& redirectUri, 
                 return;
             }
             spdlog::info("drive: signed in");
+            guard->storeTime_ = QFileInfo(gdrive::storePath()).lastModified();
             guard->connected_ = true;
+            guard->expired_ = false;
             guard->email_ = email;
             emit guard->connectedChanged();
             emit guard->signedIn();
@@ -484,11 +541,13 @@ void GoogleDrive::signOut() {
         });
     }
     QFile::remove(gdrive::storePath());
+    storeTime_ = {};
     {
         QMutexLocker lock(&gdrive::tokenMutex);
         gdrive::cachedToken.clear();
     }
     connected_ = false;
+    expired_ = false;
     email_.clear();
     setError({});
     emit connectedChanged();

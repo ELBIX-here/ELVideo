@@ -159,9 +159,24 @@ ApplicationWindow {
             player.setMpvProperty("playlist-start", start)
             player.open(file)
         }
-        function onPlaybackFailed(message) { win.osd(message) }
+        function onPlaybackFailed(message) {
+            win.osd(message)
+            if (!drive.connected) win.driveRetryPath = win.driveRetryPath || initialFile
+        }
         function onHeaderReady(header) { player.setMpvProperty("http-header-fields", header) }
+        // Signed in again (here or in the main window): carry on where it stopped.
+        function onSignedIn() {
+            if (win.driveRetryPath.length > 0) {
+                const path = win.driveRetryPath
+                win.driveRetryPath = ""
+                drive.preparePlayback(initialDriveFolder, path, win.driveFolderName || initialFolderName)
+            } else if (win.drivePlaying) {
+                drive.refreshHeader()
+            }
+        }
     }
+    // A Drive video that could not start or stopped because the sign-in expired.
+    property string driveRetryPath
     Timer {  // tokens last an hour: renew the header before the next file or reconnect needs it
         interval: 40 * 60 * 1000
         repeat: true
@@ -215,7 +230,10 @@ ApplicationWindow {
     MpvItem {
         id: player
         anchors.fill: parent
-        onError: message => win.osd(qsTr("재생할 수 없습니다: %1").arg(message))
+        onError: message => {
+            win.osd(qsTr("재생할 수 없습니다: %1").arg(message))
+            if (path.startsWith("drive://")) drive.refreshHeader()  // finds out whether the sign-in expired
+        }
         onFileLoaded: win.showControls()
         // Hover previews: the thumbnailer needs the file and the picture's aspect ratio.
         // (Not for Drive streams: previews would download the video a second time.)
@@ -280,7 +298,7 @@ ApplicationWindow {
     Column {
         anchors.centerIn: parent
         spacing: 16
-        visible: player.idle
+        visible: player.idle && !driveSignIn.visible
         LogoMark {
             anchors.horizontalCenter: parent.horizontalCenter
             width: 96
@@ -298,6 +316,41 @@ ApplicationWindow {
             primary: true
             text: qsTr("파일 열기…")
             onClicked: openDialog.open()
+        }
+    }
+
+    // The Drive sign-in expired: the way back in, without leaving the player.
+    Rectangle {
+        id: driveSignIn
+        anchors.horizontalCenter: parent.horizontalCenter
+        y: player.idle ? (parent.height - height) / 2 : 72
+        visible: drive.expired && (win.drivePlaying || win.driveRetryPath.length > 0 || initialFile.startsWith("drive://"))
+        width: Math.min(parent.width - 32, expiredColumn.implicitWidth + 48)
+        height: expiredColumn.implicitHeight + 36
+        radius: 16
+        color: Theme.hud
+        border.color: Qt.rgba(1, 1, 1, 0.08)
+        Column {
+            id: expiredColumn
+            anchors.centerIn: parent
+            width: Math.min(implicitWidth, parent.width - 48)
+            spacing: 14
+            Text {
+                anchors.horizontalCenter: parent.horizontalCenter
+                text: drive.busy ? qsTr("브라우저에서 Google 로그인을 마치면 이어서 재생합니다.")
+                                 : qsTr("Google 로그인이 만료되어 Drive 동영상을 재생할 수 없습니다.")
+                color: Theme.hudText
+                font.family: Theme.fontFamily
+                font.pixelSize: 15
+                font.weight: Font.DemiBold
+            }
+            AppButton {
+                anchors.horizontalCenter: parent.horizontalCenter
+                primary: true
+                enabled: !drive.busy
+                text: drive.busy ? qsTr("기다리는 중…") : qsTr("Google 계정 다시 연결")
+                onClicked: drive.signIn()
+            }
         }
     }
 

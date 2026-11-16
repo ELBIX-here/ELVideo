@@ -429,6 +429,44 @@ ApplicationWindow {
                 }
             }
 
+            // Google no longer accepts the Drive sign-in (Google ends it after a while):
+            // say so on every page, with the way back in.
+            Rectangle {
+                Layout.fillWidth: true
+                visible: drive.expired && appSettings.libraryFolders.some(f => drive.isDrive(f))
+                implicitHeight: expiredRow.implicitHeight + 20
+                radius: Theme.cardRadius
+                color: Theme.surface
+                border.color: Theme.border
+                RowLayout {
+                    id: expiredRow
+                    anchors.fill: parent
+                    anchors.leftMargin: 16
+                    anchors.rightMargin: 10
+                    spacing: 12
+                    Icon {
+                        glyph: "\uE753"
+                        size: 18
+                        color: Theme.danger
+                    }
+                    Text {
+                        Layout.fillWidth: true
+                        text: drive.busy ? qsTr("브라우저에서 Google 로그인을 마치면 다시 연결됩니다.")
+                                         : qsTr("Google 로그인이 만료되어 Drive 폴더를 열 수 없습니다.")
+                        wrapMode: Text.WordWrap
+                        color: Theme.text
+                        font.family: Theme.fontFamily
+                        font.pixelSize: Theme.body
+                    }
+                    AppButton {
+                        primary: true
+                        enabled: !drive.busy
+                        text: drive.busy ? qsTr("기다리는 중…") : qsTr("다시 연결")
+                        onClicked: drive.signIn()
+                    }
+                }
+            }
+
             Item {
                 id: body
                 Layout.fillWidth: true

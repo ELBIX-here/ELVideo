@@ -147,7 +147,7 @@ Item {
             Section {
                 title: qsTr("Google Drive")
                 SettingRow {
-                    label: drive.connected ? qsTr("연결됨") : qsTr("연결 안 됨")
+                    label: drive.connected ? qsTr("연결됨") : drive.expired ? qsTr("로그인 만료") : qsTr("연결 안 됨")
                     description: drive.busy ? qsTr("브라우저에서 Google 로그인을 마치면 연결됩니다.")
                         : drive.error.length > 0 ? drive.error
                         : drive.connected ? (drive.email.length > 0 ? qsTr("%1 · Drive 폴더를 읽기 전용으로 엽니다.").arg(drive.email)
@@ -158,7 +158,8 @@ Item {
                         visible: drive.configured
                         enabled: !drive.busy
                         primary: !drive.connected
-                        text: drive.connected ? qsTr("연결 해제") : drive.busy ? qsTr("기다리는 중…") : qsTr("연결")
+                        text: drive.connected ? qsTr("연결 해제") : drive.busy ? qsTr("기다리는 중…")
+                            : drive.expired ? qsTr("다시 연결") : qsTr("연결")
                         onClicked: drive.connected ? drive.signOut() : drive.signIn()
                     }
                 }

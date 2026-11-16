@@ -34,6 +34,10 @@ Item {
         folderName: page.crumbs[page.crumbs.length - 1].name
     }
     onVisibleChanged: if (visible) listing.refresh()
+    Connections {
+        target: drive
+        function onSignedIn() { if (page.isDrive) listing.refresh() }
+    }
 
     // Breadcrumb: the library folder, then each folder down to this one.
     readonly property var crumbs: {
@@ -464,7 +468,8 @@ Item {
                     Layout.topMargin: 8
                     visible: page.isDrive && !listing.exists
                     primary: true
-                    text: drive.connected ? qsTr("다시 시도") : qsTr("Google 계정 연결")
+                    text: drive.busy ? qsTr("로그인 기다리는 중…") : drive.connected ? qsTr("다시 시도")
+                        : drive.expired ? qsTr("Google 계정 다시 연결") : qsTr("Google 계정 연결")
                     enabled: !drive.busy
                     onClicked: drive.connected ? listing.refresh() : drive.signIn()
                 }

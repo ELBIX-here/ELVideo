@@ -1,11 +1,14 @@
 #pragma once
 
 #include <QByteArray>
+#include <QDateTime>
+#include <QFileSystemWatcher>
 #include <QObject>
 #include <QPointer>
 #include <QString>
 #include <QVariant>
 
+#include <functional>
 #include <optional>
 #include <vector>
 
@@ -56,6 +59,9 @@ struct Item {
 // Blocking calls for worker threads (QThreadPool), never the UI thread.
 // They throw nothing; on failure they return nothing and set `error`.
 QString accessToken(QString* error = nullptr, bool refresh = false);
+// Called (on the thread that asked for a token) when Google no longer accepts the
+// saved sign-in: it expired or access was withdrawn. The app then asks to sign in again.
+void setExpiredHandler(std::function<void()> handler);
 std::optional<std::vector<Item>> children(const QString& folderId, QString* error = nullptr);
 std::vector<Item> sharedDrives();
 QByteArray thumbnail(const QString& fileId, int size);
@@ -72,6 +78,8 @@ class GoogleDrive : public QObject {
     Q_OBJECT
     Q_PROPERTY(bool configured READ configured CONSTANT)
     Q_PROPERTY(bool connected READ connected NOTIFY connectedChanged)
+    // Was connected, but Google no longer accepts the sign-in: sign in again.
+    Q_PROPERTY(bool expired READ expired NOTIFY connectedChanged)
     Q_PROPERTY(QString email READ email NOTIFY connectedChanged)
     Q_PROPERTY(bool busy READ busy NOTIFY busyChanged)          // signing in
     Q_PROPERTY(QString error READ error NOTIFY errorChanged)    // the last sign-in or browse problem
@@ -87,6 +95,7 @@ public:
 
     bool configured() const { return gdrive::configured(); }
     bool connected() const { return connected_; }
+    bool expired() const { return expired_; }
     QString email() const { return email_; }
     bool busy() const { return busy_; }
     QString error() const { return error_; }
@@ -126,8 +135,13 @@ private:
     void setError(const QString& error);
     void finishSignIn(const QString& code, const QString& redirectUri, const QString& verifier);
     void stopServer();
+    void markExpired();
+    void syncWithStore();  // the other ELVideo process signed in or out
 
     bool connected_ = false;
+    bool expired_ = false;
+    QDateTime storeTime_;  // google.dat as last seen
+    QFileSystemWatcher storeWatcher_;
     QString email_;
     bool busy_ = false;
     QString error_;

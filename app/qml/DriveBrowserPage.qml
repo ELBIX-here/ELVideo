@@ -133,7 +133,8 @@ Item {
                 }
                 Text {
                     Layout.alignment: Qt.AlignHCenter
-                    text: !drive.connected ? qsTr("Google Drive에 연결되어 있지 않아요") : qsTr("Drive를 열 수 없어요")
+                    text: drive.expired ? qsTr("Google 로그인이 만료되었어요")
+                        : !drive.connected ? qsTr("Google Drive에 연결되어 있지 않아요") : qsTr("Drive를 열 수 없어요")
                     color: Theme.text
                     font.family: Theme.displayFont
                     font.pixelSize: Theme.tagline
@@ -159,7 +160,8 @@ Item {
                     visible: drive.configured
                     primary: true
                     enabled: !drive.busy
-                    text: drive.busy ? qsTr("로그인 기다리는 중…") : drive.connected ? qsTr("다시 시도") : qsTr("Google 계정 연결")
+                    text: drive.busy ? qsTr("로그인 기다리는 중…") : drive.connected ? qsTr("다시 시도")
+                        : drive.expired ? qsTr("Google 계정 다시 연결") : qsTr("Google 계정 연결")
                     onClicked: drive.connected ? page.go(page.trail) : drive.signIn()
                 }
             }
